@@ -277,13 +277,13 @@ static void ChkRegisterPlaceholderBank(void)
 {
 	static int logged;
 	int city = JerCityRegister("PLCHLDR",
-		"..\\JERICHO\\MODS\\carhacks\\D1CARS\\PLCHLDR.LEV",
+		"..\\JERICHO\\MODS\\carhacks\\PLCHLDR\\PLCHLDR.LEV",
 		NULL);
 
 	if (city >= 0 && !logged)
 	{
 		logged = 1;
-		printInfo("[carhacks] placeholder bank registered as city %d from carhacks\\D1CARS\n", city);
+		printInfo("[carhacks] placeholder bank registered as city %d from carhacks\\PLCHLDR\n", city);
 	}
 }
 
