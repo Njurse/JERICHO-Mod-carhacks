@@ -38,14 +38,21 @@ than guessing. `carid.h` is the single place that defines this; everything else
 ## The connection schema — `net.{c,h}`
 
 carhacks registers its own channel on the bridge mp already exposes
-(`jer_net.h`), so **no mp change is needed for the transport**:
+(`jer_net.h`), so **no mp change is needed to add a channel**:
 
 | | |
 |---|---|
 | channel | `carhacks.car`, `JER_NET_RELIABLE` |
-| inbound | `JER_EVENT_NET_RECV`, matched on the channel name |
+| inbound | `JER_EVENT_NET_RECV`, matched on the channel name; `peer` is the ORIGINAL sender |
 | size | ≤ 27 bytes payload (the bridge's cap is 1024) |
 | with no session | every call is a no-op (`jer_net_is_active() == 0`) |
+
+`MP_CHANNEL` carries `fromPlayer`, and both relay paths (the in-game host and the
+dedicated server) stamp it from the connection. That is what makes `peer` the real
+sender on a client: it has one link, to the host/server, so the header is the only
+place the original id can survive. It used to arrive as 0, and carhacks' own
+`peer < 1` guard then discarded every relayed `PICK` — the dedicated-server symptom
+where a peer's imported car was never folded in.
 
 Message layout — `[wireVersion][tag]` then the payload:
 

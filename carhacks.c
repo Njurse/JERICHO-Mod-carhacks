@@ -523,7 +523,7 @@ static int ChkOnCarPeerDraw(void* ud, void* args)
 {
 	JER_ARGS_CAR_PEER_DRAW* a = (JER_ARGS_CAR_PEER_DRAW*)args;
 	CHK_CAR_ID peer;
-	int slot, drawnModel, drawnCity, peerCity, theirs, relog;
+	int slot, drawnModel, drawnCity, peerCity, theirs, relog, loadedSlot = -1;
 
 	(void)ud;
 
@@ -558,6 +558,16 @@ static int ChkOnCarPeerDraw(void* ud, void* args)
 			printInfo("[carhacks/net] peer %d drives %s model %d and this machine draws exactly that "
 				"(slot %d) - their own colours\n",
 				a->player, chkNetCityName(drawnCity), drawnModel, slot);
+		else if ((loadedSlot = chkImportSlotForCar(peerCity, chkCarIdModel(peer))) >= 0 &&
+			JerCarSlotUsable(loadedSlot))
+			/* The car IS here - the body mp is drawing just has not adopted its slot
+			 * yet. This is the frame or two between the fold and mp's next snapshot;
+			 * calling it "not loaded here" made a normal handover look like a failure
+			 * (and the dedicated-server car gate counted it as one). */
+			printInfo("[carhacks/net] peer %d drives %s model %d, loaded in slot %d - this body is "
+				"still adopting it (drawn %s model %d in slot %d; using that car's own colours)\n",
+				a->player, chkNetCityName(peerCity), (int)chkCarIdModel(peer), loadedSlot,
+				chkNetCityName(drawnCity), drawnModel, slot);
 		else
 			printInfo("[carhacks/net] peer %d drives %s model %d, but this machine draws %s model %d in slot %d"
 				" - using that car's own colours (theirs is not loaded here)\n",
