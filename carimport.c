@@ -1292,6 +1292,61 @@ void chkImportDump(int level)
 		entries, (entries == 1) ? "y" : "ies", gChkSetVersion);
 }
 
+/* JERICHO: reload all imported cars. This is the pause menu's "Reload all cars",
+ * and it is deliberately a full unload/reload rather than another hot load over the
+ * top: a car that looks wonky may have a stale pin, a palette row or a geometry block,
+ * and only releasing the slot gives those back. The set (slot -> city/model) is kept
+ * across the release, then re-applied and rebuilt. The per-city buffers are released
+ * by each slot release when it was their last live user, and reloaded on demand by
+ * chkImportHotLoad - so this also exercises the city unload/reload path.
+ *
+ * Safe during a frame: no draw can run between the release and the rebuild, and
+ * chkImportHotLoad rebuilds the dentable dump of every car still pointing at a slot. */
+int chkImportReloadAll(void)
+{
+	CHK_IMPORT_ENTRY keep[CHK_IMPORT_MAX_SLOTS];
+	int slot, n = 0;
+
+	memcpy(keep, gChkSet, sizeof(keep));
+
+	for (slot = CHK_IMPORT_SPARE_FIRST; slot < CHK_IMPORT_MAX_SLOTS; slot++)
+	{
+		if (slot == SPECIAL_CAR_SLOT || !keep[slot].used)
+			continue;
+
+		chkImportReleaseSlot(slot);
+	}
+
+	for (slot = CHK_IMPORT_SPARE_FIRST; slot < CHK_IMPORT_MAX_SLOTS; slot++)
+	{
+		CHK_CAR_ID id;
+
+		if (slot == SPECIAL_CAR_SLOT || !keep[slot].used)
+			continue;
+
+		id = chkCarId((keep[slot].city >= 0) ? keep[slot].city : CHK_CITY_NATIVE,
+			keep[slot].model);
+
+		if (chkImportSetSlot(slot, id))
+			n++;
+	}
+
+	for (slot = CHK_IMPORT_SPARE_FIRST; slot < CHK_IMPORT_MAX_SLOTS; slot++)
+	{
+		if (slot == SPECIAL_CAR_SLOT || !gChkSet[slot].used)
+			continue;
+
+		chkImportHotLoad(slot);
+	}
+
+	chkNetRequestReannounce("reload all cars");
+	CarSlotResReport();
+
+	printInfo("[carhacks] reload all cars: %d imported slot(s) released and rebuilt; city data reloaded on demand\n", n);
+
+	return n;
+}
+
 /* Can the ENGINE build resident `slot` NOW?
  *
  * A set normally reaches the engine from JER_EVENT_CAR_DATA_SOURCE, before the

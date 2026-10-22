@@ -649,6 +649,7 @@ void chkNetLocalSwitched(CHK_CAR_ID was, CHK_CAR_ID now)
 	gChkNetLocalSet = 1;
 
 	chkNetAdvertisePick((int)now.city, (int)now.model);
+	chkNetRequestReannounce("we changed car");
 
 	if (jer_net_is_host())
 	{
@@ -1364,6 +1365,7 @@ static int chkNetOnRecv(void* ud, void* args)
 			 * car. Folding locally is also correct on a host game client, and when the
 			 * import agreement is off (publish returns early in both cases). */
 			chkNetFoldPeerCars();
+			chkNetRequestReannounce("a peer's car changed");
 
 			/* The host owns the SET, so it re-publishes with the claim in - but the
 			 * identity table is not part of the import agreement: every machine needs
@@ -1431,6 +1433,7 @@ static int chkNetOnRecv(void* ud, void* args)
 				 * drawn as the level's own car of the same number. Reported as "player 3
 				 * didn't see player 2's imported car". */
 				chkNetFoldPeerCars();
+				chkNetRequestReannounce("the host's car table arrived");
 
 				/* The other half of the same contract: a player who is GONE unloads.
 				 * Give their car's slot back - engine (pins, pool pages, baked index,
@@ -1539,15 +1542,51 @@ void chkNetRequestSet(void)
 /* Announcing what we drive                                            */
 /* ------------------------------------------------------------------ */
 
-/* How often an UNCHANGED car is announced again - see the dedupe in chkNetOnFrame. A few
- * seconds of redundancy on one small message, and it is what turns a lost pick into a
- * self-healing one.
+/* How often an UNCHANGED car is announced again - see the dedupe in chkNetOnFrame.
+ *
+ * A FIXED period makes every machine re-announce on the same beats; a semi-random one
+ * spreads the traffic and, more importantly, lets an EVENT arm a short delay: a car
+ * change, a join, a peer's pick or a Reload All Cars asks for a re-announce a few
+ * frames from now, then the normal jittered cadence resumes. That is how a late
+ * joiner (or a machine that missed a packet) learns what everyone drives without a
+ * one-shot message that can be lost.
  *
  * Counted in FRAMES, not milliseconds: carhacks takes no platform headers - mp keeps
  * windows.h out of its mod files for winsock ordering, and <time.h> is shadowed by the
- * game's own on this include path - and the engine's fixed step makes a frame count a good
- * enough heartbeat for something whose whole job is to be repeated. ~3 s at this rate. */
-#define CHK_NET_ADVERT_FRAMES 90
+ * game's own on this include path - and the engine's fixed step makes a frame count a
+ * good enough heartbeat. 45..150 frames is ~1.5..5 s at the engine's rate. */
+#define CHK_NET_ADVERT_MIN	45
+#define CHK_NET_ADVERT_MAX	150
+
+static int gChkNetAdvertGap = 90;	/* this cycle's interval, re-rolled after each send */
+static unsigned int gChkNetRandState = 0x9E3779B9u;
+
+static int chkNetRandRange(int lo, int hi)
+{
+	gChkNetRandState = gChkNetRandState * 1664525u + 1013904223u;
+
+	return lo + (int)((gChkNetRandState >> 16) % (unsigned)(hi - lo + 1));
+}
+
+static void chkNetAdvertRearm(void)
+{
+	gChkNetAdvertGap = chkNetRandRange(CHK_NET_ADVERT_MIN, CHK_NET_ADVERT_MAX);
+}
+
+/* Arm a re-announce a few frames from now (semi-random, so several machines reacting
+ * to the same event do not transmit in lockstep). The caller names the event; the
+ * line is the evidence that the heartbeat was re-armed, not just hoped for. */
+void chkNetRequestReannounce(const char* why)
+{
+	if (!jer_net_is_active())
+		return;
+
+	gChkNetAdvertGap = chkNetRandRange(1, 30);
+
+	printInfo("[carhacks/net] re-announce armed in %d frame(s): %s\n",
+		gChkNetAdvertGap, (why != NULL) ? why : "?");
+}
+
 
 static int chkNetOnFrame(void* ud, void* args)
 {
@@ -1592,6 +1631,7 @@ static int chkNetOnFrame(void* ud, void* args)
 			chkNetRequestSet();
 
 		gChkNetLocalSet = 0;	/* re-advertise OUR car for this session */
+		chkNetRequestReannounce("session start / a peer joined");
 
 		if (!chkNetAgreeEnabled())
 			printInfo("[carhacks/net] import agreement OFF (mp_agree_imports = 0) - every machine keeps its own set\n");
@@ -1656,12 +1696,13 @@ static int chkNetOnFrame(void* ud, void* args)
 		CHK_CAR_ID mine = chkNetLocalCar();
 
 		if (gChkNetLocalSet && chkCarIdEqual(mine, gChkNetLocal) &&
-			gChkNetFrame - gChkNetAdvertFrame < CHK_NET_ADVERT_FRAMES)
+			(int)(gChkNetFrame - gChkNetAdvertFrame) < gChkNetAdvertGap)
 			return JER_RESULT_CONTINUE;
 
 		gChkNetLocal = mine;
 		gChkNetLocalSet = 1;
 		gChkNetAdvertFrame = gChkNetFrame;
+		chkNetAdvertRearm();		/* next unchanged re-announce gets a new gap */
 
 		if (!chkCarIdIsSet(mine))
 			return JER_RESULT_CONTINUE;

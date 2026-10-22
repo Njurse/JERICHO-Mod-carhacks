@@ -293,6 +293,12 @@ void chkImportApplyToCarData(int count, int* models, int* modelSource);
 /* One line per entry, for the log. */
 void chkImportDump(int level);
 
+/* Reload every imported car: release the slots (pins, pool pages, palette rows,
+ * geometry and the city buffers they were the last users of), re-apply the set,
+ * and hot-load each slot again. Stock/level cars are untouched. Returns how many
+ * imported slots were rebuilt. Called by mp's "Reload all cars". */
+int chkImportReloadAll(void);
+
 /* ---- the verifier ----------------------------------------------------- */
 
 /* Per frame: check that each imported slot we hold is actually wearing the

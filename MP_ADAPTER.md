@@ -81,12 +81,15 @@ client's `PICK` only reaches the host - so the host relays the table (above).
 `GetCarModelSourceCity(slot)` as the city and `CHK_CITY_NATIVE` for the level's
 own), so it reports the car actually being driven rather than a menu pick; a FRAME
 watcher re-advertises whenever it changes, because mp settles `-mpcar` *after* the
-session is up, **and again every few seconds while it does not change**
-(`CHK_NET_ADVERT_FRAMES`). That second part is not politeness: this advert is the
-session's only one-shot announcement - every other direction is re-sent by the host on a
-timer - so without it a lost advert, or an import it triggered that failed, leaves the
-host drawing that player's old car for the rest of the match. `CHK_DROP_ADVERT=<n>`
-throws the first `n` adverts away so that failure is reachable in a test.
+session is up, **and again on a semi-random heartbeat while it does not change**
+(45..150 frames). An event arms a short re-announce (1..30 frames) first: a car change,
+a join, a peer's pick, a car-table/set arrival, or `Reload all cars`. That second part
+is not politeness: this advert is the session's only one-shot announcement - every
+other direction is re-sent by the host on a timer - so without it a lost advert, a late
+joiner, or an import it triggered that failed leaves the host drawing that player's old
+car for the rest of the match. The jitter also keeps every machine from transmitting on
+the same beat. `CHK_DROP_ADVERT=<n>` throws the first `n` adverts away so that failure
+is reachable in a test.
 `chkNetPeerCar(player, out)` / `chkNetPeerCount()` read it back.
 
 **The correction (`JER_EVENT_CAR_PEER_DRAW`).** mp fires this as it applies a

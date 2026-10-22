@@ -61,6 +61,12 @@ void chkNetRegister(JERICHO_CONTEXT* ctx);
 /* Tell the session what this machine wants to drive. No-op with no session. */
 void chkNetAdvertisePick(int city, int model);
 
+/* Re-announce what we drive a few frames from now, then resume the jittered
+ * heartbeat. Called after a car change, a join, a peer's pick, a car-table/set
+ * arrival and Reload All Cars, so a late joiner or a machine that missed a packet
+ * heals without waiting for the next full period. `why` is logged. */
+void chkNetRequestReannounce(const char* why);
+
 /* Ask the host for the agreed set (a client does this when it joins). */
 void chkNetRequestSet(void);
 
