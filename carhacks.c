@@ -269,24 +269,6 @@ static void ChkRegisterBetaBank(void)
 	}
 }
 
-/* JERICHO: the placeholder bank, if one was baked. A normal car-data bank whose
- * model 4 is a uniform checker body carrying D2 car sounds; the mp stand-in draws
- * it for a vehicle whose own city is not installed here. No .LCF: the engine
- * derives default cosmetics, which is all a placeholder needs. */
-static void ChkRegisterPlaceholderBank(void)
-{
-	static int logged;
-	int city = JerCityRegister("PLCHLDR",
-		"..\\JERICHO\\MODS\\carhacks\\PLCHLDR\\PLCHLDR.LEV",
-		NULL);
-
-	if (city >= 0 && !logged)
-	{
-		logged = 1;
-		printInfo("[carhacks] placeholder bank registered as city %d from carhacks\\PLCHLDR\n", city);
-	}
-}
-
 static int ChkOnCarAvailability(void* ud, void* args)
 {
 	JER_ARGS_CAR_AVAILABILITY* a = (JER_ARGS_CAR_AVAILABILITY*)args;
@@ -297,7 +279,6 @@ static int ChkOnCarAvailability(void* ud, void* args)
 	 * the registry refresh that ran just before this hook would not have seen a
 	 * module-owned row yet. */
 	ChkRegisterBetaBank();
-	ChkRegisterPlaceholderBank();
 
 	if (a == NULL)
 		return JER_RESULT_CONTINUE;
@@ -597,7 +578,6 @@ void carhacks_register(JERICHO_CONTEXT* ctx)
 	 * registry's config refresh keeps it; registering here also makes it visible
 	 * before the first car list (cities.ini is not needed). */
 	ChkRegisterBetaBank();
-	ChkRegisterPlaceholderBank();
 
 	for (i = 0; i < CHK_NET_MAX_PLAYERS; i++)
 	{
