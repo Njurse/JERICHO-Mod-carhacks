@@ -100,6 +100,8 @@ static int gChkWalked;		/* harness: the walk to the car screen happened */
 static int gChkInFrontend;	/* a level has not started since we entered the menus */
 static int gChkFrontendFrames;	/* frames since entering the menus (harness settle) */
 static int gChkRode;		/* the harness has ridden once */
+static int gChkSessionSeen;	/* a live mp session has been seen this run */
+static int gChkAfterSession;	/* the session ended; GameType/NumPlayers are now stale */
 
 static int gChkForceCity = -1;	/* harness: CHK_FORCE_ROSTER_CITY */
 static int gChkForceCar = -1;	/* harness: CHK_FORCE_CAR */
@@ -483,6 +485,9 @@ static int chkOurMenuOnScreen(void)
 void chkCarSelectArm(void)
 {
 	int inSession = jer_net_is_active();
+	int afterSession = gChkAfterSession;
+
+	gChkAfterSession = 0;
 
 	/* A single-player Take a Ride is the ordinary case: 2-player split-screen and
 	 * a mission's own car pick keep the stock screen.
@@ -493,8 +498,13 @@ void chkCarSelectArm(void)
 	 * session was live, silently, which is why a joining player never saw the
 	 * roster. With a session up, the only question that matters is whether the
 	 * session wants the pick, and mp's own screen is what we replace -- so the
-	 * menu is offered here and Ride hands the launch back (see chkRideWith). */
-	if (!inSession && (GameType != GAME_TAKEADRIVE || NumPlayers != 1))
+	 * menu is offered here and Ride hands the launch back (see chkRideWith).
+	 *
+	 * AFTER a session the same two values are stale for the same reason: the LAN
+	 * flow set NumPlayers=2 and mp may leave GameType at GAME_MISSION. The car
+	 * screen the player opens next is an ordinary Take a Ride, so arm on the
+	 * transition even though the values still look like a session's. */
+	if (!inSession && !afterSession && (GameType != GAME_TAKEADRIVE || NumPlayers != 1))
 		return;
 
 	/* the roster opens on the level's own city, i.e. exactly the stock list */
@@ -514,6 +524,19 @@ static int chkSelOnFrame(void* ud, void* args)
 {
 	(void)ud;
 	(void)args;
+
+	/* A session leaving GameType/NumPlayers behind is what stopped the stock car
+	 * screen being replaced after an online match: the session is over, but the
+	 * LAN flow left NumPlayers at 2 (or a joiner's GameType at GAME_MISSION), so
+	 * the single-player gate below bailed. Remember the transition, and let the
+	 * next car screen arm regardless of those stale values. */
+	if (jer_net_is_active())
+		gChkSessionSeen = 1;
+	else if (gChkSessionSeen)
+	{
+		gChkSessionSeen = 0;
+		gChkAfterSession = 1;
+	}
 
 	if (gChkInFrontend)
 		gChkFrontendFrames++;
