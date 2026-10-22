@@ -1344,15 +1344,26 @@ static int chkNetOnRecv(void* ud, void* args)
 			if (a->len < 4 || a->peer < 1 || a->peer >= CHK_NET_MAX_PLAYERS)
 				break;
 
+			/* A relay broadcasts to the SENDER too (the dedicated server does; the
+			 * in-game host's MpHostBroadcast does not include itself, but a client's
+			 * echo of its own frame is not news either way). The local identity is
+			 * already recorded by chkNetOnFrame and the local change path. */
+			if (a->peer == jer_net_local_player())
+				break;
+
 			gChkNetPeerPick[a->peer] = chkCarId(p[2], p[3]);
 			gChkNetPeerPickSet[a->peer] = 1;
 
 			printInfo("[carhacks/net] player %d drives %s model %d\n",
 				a->peer, chkNetCityName((int)p[2]), (int)p[3]);
 
-			/* a new car for this player may leave their old slot unused (the fold in
-			 * chkNetPublishSet does this too, but only when the agreement is on) */
-			chkNetUnbindChangedPeers();
+			/* APPLY IT HERE, ON EVERY MACHINE. The host used to get this indirectly
+			 * through chkNetPublishSet, and a client through CHK_NET_CARS - but a
+			 * dedicated server has no game host to publish either, so a relayed pick
+			 * was recorded and never folded: the peer stayed drawn as the level's own
+			 * car. Folding locally is also correct on a host game client, and when the
+			 * import agreement is off (publish returns early in both cases). */
+			chkNetFoldPeerCars();
 
 			/* The host owns the SET, so it re-publishes with the claim in - but the
 			 * identity table is not part of the import agreement: every machine needs
