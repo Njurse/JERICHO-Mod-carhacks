@@ -188,6 +188,10 @@ int chkImportReleaseSlot(int slot)
 		printInfo("[carhacks] released resident slot %d - free for the next car\n", slot);
 	}
 
+	/* The slot no longer names its source city; if no other live slot does, the city's
+	 * palette rows, CLUT band and buffer can go back now. */
+	JerReleaseUnusedCarImports();
+
 	return held;
 }
 
@@ -1408,6 +1412,10 @@ int chkImportHotLoad(int slot)
 	if (built > 0 || cos > 0)
 		printInfo("[carhacks/net] slot %d is now the imported car itself: geometry %s, cosmetics %s\n",
 			slot, (built > 0) ? "built" : "already there", (cos > 0) ? "applied" : "already there");
+
+	/* The slot's OLD source city may have just lost its last live car. Free it before the
+	 * next allocation needs its rows/pages. */
+	JerReleaseUnusedCarImports();
 
 	return (built > 0) ? built : (cos > 0 ? 1 : 0);
 }
