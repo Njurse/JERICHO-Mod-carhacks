@@ -644,6 +644,25 @@ int chkCityAssetsPresent(int city)
 	return JerCityRegistered(city) && JerCityFileExists(city, JER_CITY_FILE_LEVEL);
 }
 
+/* The stand-in row, hidden from the picker unless the operator opts in. The mp
+ * fallback still DRAWS it (that path goes through chkCityAssetsPresent), so the
+ * row stays registered and its data stays loaded. */
+static int chkShowPlaceholder(void)
+{
+	return jer_config_get_int("carhacks", "show_placeholder", CHK_PLACEHOLDER_DEFAULT) != 0;
+}
+
+int chkCitySelectable(int city)
+{
+	if (!chkCityAssetsPresent(city))
+		return 0;
+
+	if (!chkShowPlaceholder() && strcmp(chkCityName(city), "PLCHLDR") == 0)
+		return 0;
+
+	return 1;
+}
+
 int chkCityCount(void)
 {
 	return JerCityCount();

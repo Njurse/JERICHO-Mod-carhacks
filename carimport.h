@@ -96,6 +96,19 @@ int chkImportCanonicalSlot(CHK_CAR_ID car, int* outCount);
  * (the mp picker's city row, the frontend roster row, chkFillCarTableFromImport). */
 int chkCityAssetsPresent(int city);
 
+/* The placeholder stand-in (city row PLCHLDR) is a body to DRAW for the mp
+ * fallback, not a car to drive, so the picker hides it unless `show_placeholder`
+ * says otherwise. A dev build defaults it ON so the stand-in can be tested; a
+ * release defaults it OFF. */
+#ifdef JER_DEV_BUILD
+#define CHK_PLACEHOLDER_DEFAULT 1
+#else
+#define CHK_PLACEHOLDER_DEFAULT 0
+#endif
+
+/* The picker's view of a city: chkCityAssetsPresent PLUS the placeholder rule. */
+int chkCitySelectable(int city);
+
 /* The set's own slot holding (city, model), or -1. `city` < 0 matches any. */
 int chkImportSlotForCar(int city, int model);
 

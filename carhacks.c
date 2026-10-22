@@ -60,6 +60,10 @@ static const CHK_HACK gChkHacks[] =
 	{ "Unlock extra vehicles", "unlock_extra_vehicles", 1 },
 	{ "Cross-city vehicles",   "cross_city_vehicles",   1 },
 	{ "Car select menu",       "car_select_menu",      1 },
+	/* The stand-in car is a fallback body, not a vehicle to drive, so only a
+	 * development build puts it in the picker by default. An operator can flip
+	 * this key either way; see chkCitySelectable in carimport.c. */
+	{ "Show placeholder car",  "show_placeholder",      CHK_PLACEHOLDER_DEFAULT },
 };
 
 #define CHK_HACK_COUNT ((int)(sizeof(gChkHacks) / sizeof(gChkHacks[0])))

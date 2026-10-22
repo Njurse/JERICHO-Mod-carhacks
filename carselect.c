@@ -294,7 +294,7 @@ static int chkSelAdjust(void* ud, int dir)
 		{
 			gChkRosterCity = (gChkRosterCity + dir + n) % n;
 
-			if (chkCityAssetsPresent(gChkRosterCity))
+			if (chkCitySelectable(gChkRosterCity))
 				break;
 		}
 
