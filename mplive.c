@@ -192,6 +192,9 @@ static int ChkMpLoad(void* userdata, void* args)
 			int c = chkCarIdCity(held);
 			int cars = chkImportCarsOnSlot(s, NULL);
 
+			if (!chkImportIsSpareSlot(s))
+				continue;
+
 			jer_console_log("[carhacks/mp]   spare %d: held=%d %s model %d (cars on it %d)",
 				s, chkImportSlotHeld(s),
 				(c >= 0) ? chkCityName(c) : "-", chkCarIdModel(held), cars);
@@ -228,7 +231,7 @@ static int ChkMpLoad(void* userdata, void* args)
 
 		cars = (oldSlot >= 0) ? chkImportCarsOnSlot(oldSlot, &first) : 0;
 
-		if (oldSlot >= CHK_IMPORT_SPARE_FIRST && oldSlot < CHK_IMPORT_MAX_SLOTS &&
+		if (chkImportIsSpareSlot(oldSlot) &&
 			cars == 1 && first == localCar && localCar >= 0)
 		{
 			chkImportReleaseSlot(oldSlot);

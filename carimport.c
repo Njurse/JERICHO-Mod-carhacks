@@ -157,6 +157,10 @@ int chkImportReleaseSlot(int slot)
 	if (slot < 0 || slot >= CHK_IMPORT_MAX_SLOTS)
 		return 0;
 
+	/* The level's special body is not ours to release. */
+	if (slot == SPECIAL_CAR_SLOT)
+		return 0;
+
 	held = gChkSet[slot].used;
 
 	JerReleaseCarSlot(slot);		/* pins, pool pages, baked index, geometry, manifest -
@@ -252,6 +256,14 @@ static CHK_IMPORT_ENTRY* chkSlot(int slot)
 	return &gChkSet[slot];
 }
 
+/* See carimport.h. The engine's special slot (11) sits INSIDE the extended range
+ * now, so every spare-slot walk asks here rather than treating < MAX as spare. */
+int chkImportIsSpareSlot(int slot)
+{
+	return slot >= CHK_IMPORT_SPARE_FIRST && slot < CHK_IMPORT_MAX_SLOTS &&
+		slot != SPECIAL_CAR_SLOT;
+}
+
 /* The engine's live resident models for this level, handed over from
  * JER_EVENT_CAR_DATA_SOURCE (models.c) so chkImportSlotFree can see what another
  * module claimed. The POINTER is hook-only -- but the list is not: the peer fold
@@ -261,7 +273,13 @@ static CHK_IMPORT_ENTRY* chkSlot(int slot)
  * publish-time fold could not see that mp owns slots 5/6 and took one of them. */
 static int* gChkEngineModels;		/* live, only inside the hook */
 static int  gChkEngineCount;		/* live count, or the cached count */
-#define CHK_ENGINE_CACHE	16	/* room for MAX_CAR_RESIDENT_MODELS (12) */
+#define CHK_ENGINE_CACHE	16	/* room for MAX_CAR_RESIDENT_MODELS (16) */
+#if CHK_ENGINE_CACHE < MAX_CAR_RESIDENT_MODELS
+#error "CHK_ENGINE_CACHE must cover every resident model slot"
+#endif
+#if CHK_IMPORT_MAX_SLOTS != MAX_CAR_RESIDENT_MODELS
+#error "the import set must address every resident model slot"
+#endif
 static int  gChkEngineCache[CHK_ENGINE_CACHE];
 static int  gChkEngineKnown;		/* a level has handed us its list at least once */
 
@@ -328,6 +346,12 @@ static int chkEngineModelAt(int slot)
 int chkImportSlotFree(int slot)
 {
 	if (slot < 0 || slot >= CHK_IMPORT_MAX_SLOTS)
+		return 0;
+
+	/* Slots 5..15 are the automatic choosers' range, and 11 is the level's special
+	 * body even though it now sits inside that range. Slots 0..4 stay addressable so a
+	 * config "import = 2:..." can still knock a civilian. */
+	if (slot >= CHK_IMPORT_SPARE_FIRST && !chkImportIsSpareSlot(slot))
 		return 0;
 
 	if (gChkSet[slot].used)
@@ -453,6 +477,9 @@ int chkImportCanonicalSlot(CHK_CAR_ID car, int* outCount)
 	/* the spare slots this level leaves for us, ascending */
 	for (slot = CHK_IMPORT_SPARE_FIRST; slot < CHK_IMPORT_MAX_SLOTS; slot++)
 	{
+		if (!chkImportIsSpareSlot(slot))
+			continue;		/* 11 is the level's special body */
+
 		if (gChkSet[slot].used)
 			continue;		/* ours, but another car's */
 
@@ -843,6 +870,10 @@ int chkImportSetSlot(int slot, CHK_CAR_ID id)
 	if (e == NULL)
 		return 0;
 
+	/* The level's special body is never an import target. */
+	if (slot == SPECIAL_CAR_SLOT)
+		return 0;
+
 	if (!chkCarIdIsSet(id))
 		return 0;
 
@@ -862,7 +893,7 @@ int chkImportSetSlotModel(int slot, int model)
 {
 	CHK_IMPORT_ENTRY* e = chkSlot(slot);
 
-	if (e == NULL || model < 0 || model >= CHK_MODEL_LIMIT)
+	if (e == NULL || slot == SPECIAL_CAR_SLOT || model < 0 || model >= CHK_MODEL_LIMIT)
 		return 0;
 
 	e->used = 1;
@@ -1056,7 +1087,8 @@ int chkImportLoadConfig(const char* section, int count, int skipGuestEntries)
 
 			n++;
 
-			if (vals[0] < 0 || vals[0] >= count || vals[1] < 0 || vals[1] >= CHK_CITY_COUNT_LIMIT ||
+			if (vals[0] < 0 || vals[0] >= count || vals[0] == SPECIAL_CAR_SLOT ||
+				vals[1] < 0 || vals[1] >= CHK_CITY_COUNT_LIMIT ||
 				vals[2] < 0 || vals[2] >= CHK_MODEL_LIMIT)
 			{
 				printInfo("[carhacks] import entry %d ignored (want slot:city:model)\n", n);
@@ -1222,6 +1254,9 @@ void chkImportApplyToCarData(int count, int* models, int* modelSource){
 
 	for (slot = 0; slot < count && slot < CHK_IMPORT_MAX_SLOTS; slot++)
 	{
+		if (slot == SPECIAL_CAR_SLOT)
+			continue;		/* the level's own special body */
+
 		if (!gChkSet[slot].used)
 			continue;
 
@@ -1281,7 +1316,7 @@ int chkImportHotLoad(int slot)
 {
 	int i, built, cos;
 
-	if (slot < 0 || slot >= CHK_IMPORT_MAX_SLOTS || !gChkSet[slot].used)
+	if (slot < 0 || slot >= CHK_IMPORT_MAX_SLOTS || slot == SPECIAL_CAR_SLOT || !gChkSet[slot].used)
 		return 0;
 
 	if (!gChkEngineKnown)
@@ -1290,6 +1325,9 @@ int chkImportHotLoad(int slot)
 	for (i = CHK_IMPORT_SPARE_FIRST; i < CHK_IMPORT_MAX_SLOTS; i++)
 	{
 		int city, model, curCity, curModel;
+
+		if (!chkImportIsSpareSlot(i))
+			continue;		/* 11 is the level's special body */
 
 		if (!gChkSet[i].used || gChkSet[i].model < 0)
 			continue;
@@ -1517,6 +1555,9 @@ void chkImportVerifyTick(void)
 
 	for (i = 0; i < CHK_IMPORT_MAX_SLOTS; i++)
 	{
+		if (i == SPECIAL_CAR_SLOT)
+			continue;
+
 		if (!gChkSet[i].used || chkVerifyGaveUp[i])
 			continue;
 

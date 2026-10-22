@@ -11,16 +11,25 @@
 
 #include "carid.h"
 
-/* The engine's resident car slots (MAX_CAR_RESIDENT_MODELS = 12). Slots 0..4 are
- * the level's civilians, the top slot is the engine's SPECIAL_CAR_SLOT, and the
- * rest are spares an import may take.
+/* The engine's resident car slots (MAX_CAR_RESIDENT_MODELS = 16). Slots 0..4 are
+ * the level's civilians, 11 is the engine's SPECIAL_CAR_SLOT, and the rest
+ * (5..10 and 12..15) are spares an import may take.
  *
- * The pool is as deep as the ENGINE's array: capping it at 8 left exactly three
- * spares (5, 6, 7) once mp had claimed its two, so a third player's car was
- * refused with "no spare resident slot is free" and the player drove whatever the
- * level assigned them instead of what they picked. */
-#define CHK_IMPORT_MAX_SLOTS	11	/* 0..10; 11 is SPECIAL_CAR_SLOT */
+ * The pool is as deep as the ENGINE's array. The 12 -> 16 raise is what gives an
+ * eight-player session a distinct imported car per player: mp claims 5 and 6 for
+ * its extra models, leaving 7..10 + 12..15 = eight guest import slots. Capping the
+ * pool at 8 left exactly three spares (5, 6, 7) once mp had claimed its two, so a
+ * third player's car was refused with "no spare resident slot is free" and the
+ * player drove whatever the level assigned them instead of what they picked. */
+#define CHK_IMPORT_MAX_SLOTS	16	/* 0..15; 11 is SPECIAL_CAR_SLOT */
 #define CHK_IMPORT_SPARE_FIRST	5
+
+/* Is `slot` a spare resident slot an IMPORT may claim: 5..15 except the level's
+ * special (11)? Slots 0..4 are the level's own civilians - a config import may
+ * knock one, but the automatic choosers (canonical slot, peer fold) never take
+ * one. One predicate, because with the pool no longer ending at the special slot
+ * every `slot < CHK_IMPORT_MAX_SLOTS` loop would otherwise treat 11 as spare. */
+int chkImportIsSpareSlot(int slot);
 
 /* ---- the set ----------------------------------------------------------- */
 

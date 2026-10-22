@@ -117,6 +117,9 @@ static int chkSpawnOnFrame(void* ud, void* args)
 		static char padId = 0;		/* CUTSCENE car pad id (no replay stream) */
 		int d, palette;
 
+		if (i == SPECIAL_CAR_SLOT)
+			continue;		/* the level's own special body */
+
 		if (id.city == CHK_CITY_NATIVE)
 			continue;
 

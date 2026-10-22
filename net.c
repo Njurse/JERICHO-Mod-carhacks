@@ -50,6 +50,19 @@ static int gChkNetPeerPickSet[CHK_NET_MAX_PLAYERS];
  * any more, which is why the slot is remembered here and not only in the set. */
 static int gChkNetPeerSlot[CHK_NET_MAX_PLAYERS];
 
+/* JERICHO: the slot a CHANGING peer's old car is leaving, and the car it held. Recorded by
+ * chkNetUnbindChangedPeers and reused IN PLACE by chkNetFoldPeerCars.
+ *
+ * A peer's change used to release the old slot and then take a fresh canonical spare. The
+ * release is deferred while the peer's body is still drawn on the old slot, so one change
+ * transiently held TWO slots. Three seats changing at once needed six, the pool has four
+ * (7..10; mp owns 5/6), and the fold's terminal give-up left the peer drawn as the level's
+ * own car. The slot is kept here instead: the new car replaces the old one synchronously,
+ * and the peer keeps the SAME slot for every change - one slot per player, however fast they
+ * cycle. -1 = nothing vacated. */
+static int gChkNetVacatedSlot[CHK_NET_MAX_PLAYERS];
+static CHK_CAR_ID gChkNetVacatedCar[CHK_NET_MAX_PLAYERS];
+
 /* Release decisions that are WAITING (chkNetReleaseSlotIfUnused): a slot nobody names any more
  * but that still has a car on it. Retried every frame until the car is gone (or somebody names
  * the car again). `Last*` is what the previous decision for the slot said, so a retry logs only
@@ -210,7 +223,7 @@ static int chkNetReleaseDecide(int slot, const char* why, int retry)
 	CHK_REL_VERDICT v;
 	int held, wanted, who = -1, cars, first = -1, logIt, k;
 
-	if (slot < CHK_IMPORT_SPARE_FIRST || slot >= CHK_IMPORT_MAX_SLOTS)
+	if (!chkImportIsSpareSlot(slot))
 		return CHK_REL_NOT_HELD;
 
 	if (why == NULL)
@@ -433,6 +446,8 @@ void chkNetOnLevelReset(void)
 	for (i = 0; i < CHK_NET_MAX_PLAYERS; i++)
 	{
 		gChkNetPeerSlot[i] = -1;
+		gChkNetVacatedSlot[i] = -1;
+		gChkNetVacatedCar[i] = chkCarId(CHK_CITY_NATIVE, CHK_MODEL_NONE);
 		chkNetLoadRetryClear(i);	/* the new level's build does this itself */
 	}
 
@@ -444,12 +459,41 @@ void chkNetOnLevelReset(void)
 	}
 }
 
+/* Drop a vacated slot that is NOT going to be reused in place: a newer change, a leave, or a
+ * level boundary. The slot may already be gone, where the release routine is a no-op. The
+ * player's CURRENT slot is never touched. */
+static void chkNetForgetVacated(int p, const char* why)
+{
+	int slot;
+
+	if (p < 0 || p >= CHK_NET_MAX_PLAYERS)
+		return;
+
+	slot = gChkNetVacatedSlot[p];
+	gChkNetVacatedSlot[p] = -1;
+	gChkNetVacatedCar[p] = chkCarId(CHK_CITY_NATIVE, CHK_MODEL_NONE);
+
+	if (slot < 0 || slot == gChkNetPeerSlot[p])
+		return;
+
+	chkNetReleaseSlotIfUnused(slot, (why != NULL) ? why : "vacated slot not reused");
+}
+
 /* A player whose car identity no longer names the car in the slot recorded for them has
- * CHANGED CAR (or left - see below): forget the record and let the release routine decide about
- * the old slot. This is the peer-repick half of the lifecycle, and it is deliberately not inside
- * the fold's import loop: that loop skips a player whose new car needs no import (a domestic car
- * the level holds, the `continue` near the top), which is exactly the switch that used to leave
- * the old import's slot held for the rest of the session. */
+ * CHANGED CAR (or left - see below): forget the record and KEEP the old slot for in-place
+ * reuse (chkNetFoldPeerCars). This is the peer-repick half of the lifecycle, and it is
+ * deliberately not inside the fold's import loop: that loop skips a player whose new car
+ * needs no import (a domestic car the level holds, the `continue` near the top), which is
+ * exactly the switch that used to leave the old import's slot held for the rest of the
+ * session.
+ *
+ * KEEPING the slot is what stops a change from holding two: the old car is still drawn on it,
+ * so releasing it is deferred, and taking a fresh canonical spare in the meantime is what ran
+ * a three-seat match out of four import slots. The fold replaces the old car in this slot
+ * synchronously instead (chkImportHotLoad rebuilds the body on it).
+ *
+ * If somebody else still names the old car, the slot cannot be reused - it is shared - so it
+ * goes through the ordinary release routine, which keeps it for the survivor. */
 static void chkNetUnbindChangedPeers(void)
 {
 	int p;
@@ -457,6 +501,8 @@ static void chkNetUnbindChangedPeers(void)
 	for (p = 0; p < CHK_NET_MAX_PLAYERS; p++)
 	{
 		int slot = gChkNetPeerSlot[p];
+		CHK_CAR_ID old;
+		int wanted;
 		char why[48];
 
 		if (slot < 0)
@@ -467,7 +513,26 @@ static void chkNetUnbindChangedPeers(void)
 
 		gChkNetPeerSlot[p] = -1;
 
+		old = chkImportSlotId(slot);
+		wanted = chkNetCarWantedBy(old, NULL);
+
 		snprintf(why, sizeof(why), "player %d changed car", p);
+
+		/* a previous vacated slot this player never got to reuse */
+		chkNetForgetVacated(p, why);
+
+		if (slot >= CHK_IMPORT_SPARE_FIRST && chkImportIsSpareSlot(slot) &&
+			chkCarIdIsSet(old) && !wanted)
+		{
+			gChkNetVacatedSlot[p] = slot;
+			gChkNetVacatedCar[p] = old;
+
+			printInfo("[carhacks/net] player %d changed car - slot %d (%s model %d) kept for in-place reuse\n",
+				p, slot, chkNetCityName(chkCarIdCity(old)), chkCarIdModel(old));
+
+			continue;
+		}
+
 		chkNetReleaseSlotIfUnused(slot, why);
 	}
 }
@@ -500,10 +565,14 @@ void chkNetReleaseDeparted(const int* seen)
 		slot = gChkNetPeerSlot[i];
 		gChkNetPeerSlot[i] = -1;
 
+		snprintf(why, sizeof(why), "player %d left", i);
+
+		/* A slot this player vacated by changing car is theirs to give back too. */
+		chkNetForgetVacated(i, why);
+
 		if (slot < 0 || slot >= CHK_IMPORT_MAX_SLOTS)
 			continue;
 
-		snprintf(why, sizeof(why), "player %d left", i);
 		chkNetReleaseSlotIfUnused(slot, why);
 	}
 }
@@ -551,6 +620,56 @@ void chkNetLocalSwitched(CHK_CAR_ID was, CHK_CAR_ID now)
 	}
 }
 
+/* Replace the car in `p`'s vacated slot IN PLACE, so a peer's change never needs a second
+ * resident slot. Returns 1 only when the new car is built and usable; on any failure the old
+ * car is put back and the slot is left for the retry (chkNetFoldPeerCars keeps the record).
+ *
+ * Release-then-build is safe here for the same reason it is in mplive.c's local path: this is
+ * synchronous, no frame is drawn between the two calls, and chkImportHotLoad finishes by
+ * rebuilding the dentable dump of every car still pointing at the slot. */
+static int chkNetReuseVacated(int p, int slot, CHK_CAR_ID newCar)
+{
+	CHK_CAR_ID old;
+
+	if (p < 0 || p >= CHK_NET_MAX_PLAYERS)
+		return 0;
+
+	if (slot < CHK_IMPORT_SPARE_FIRST || slot >= CHK_IMPORT_MAX_SLOTS ||
+		slot == SPECIAL_CAR_SLOT || !chkImportSlotHeld(slot))
+		return 0;
+
+	old = chkImportSlotId(slot);
+
+	if (!chkCarIdIsSet(old) || chkCarIdEqual(old, newCar))
+		return 0;
+
+	chkImportReleaseSlot(slot);
+
+	if (!chkImportSetSlot(slot, newCar))
+	{
+		chkImportSetSlot(slot, old);
+		chkImportHotLoad(slot);
+		return 0;
+	}
+
+	if (chkImportHotLoad(slot) > 0 && JerCarSlotUsable(slot))
+	{
+		/* The release audit (mp_tries T2, and MP_ADAPTER.md's lifetime table) reads a
+		 * release line for the car that left, even when the slot itself did not go. */
+		printInfo("[carhacks] release: slot %d (%s model %d) released - reused in place (player %d changed car)\n",
+			slot, chkNetCityName(chkCarIdCity(old)), chkCarIdModel(old), p);
+
+		return 1;
+	}
+
+	/* Could not build the replacement: put the old car back rather than leave a held slot
+	 * with no mesh. The next retry releases it again. */
+	chkImportSetSlot(slot, old);
+	chkImportHotLoad(slot);
+
+	return 0;
+}
+
 int chkNetFoldPeerCars(void)
 {
 	int folded = 0, p, slot;
@@ -591,6 +710,7 @@ int chkNetFoldPeerCars(void)
 			/* No identity for this player (they left, or nothing was reported yet): there
 			 * is nothing to load, and a retry armed for them must not survive - it would
 			 * keep the fold running every frame for a player who is gone. */
+			chkNetForgetVacated(p, "player has no car");
 			chkNetLoadRetryClear(p);
 			continue;
 		}
@@ -614,6 +734,7 @@ int chkNetFoldPeerCars(void)
 
 			if (pmodel < 0)
 			{
+				chkNetForgetVacated(p, "no settled car");
 				chkNetLoadRetryClear(p);	/* nothing settled yet: not a car to import */
 				continue;
 			}
@@ -629,6 +750,8 @@ int chkNetFoldPeerCars(void)
 
 			if (pcity == GameLevel && holds != 0)
 			{
+				/* The new car needs no import, so the old slot is not reused for it. */
+				chkNetForgetVacated(p, "player's new car needs no import");
 				chkNetLoadRetryClear(p);	/* in the level's pool (or unknown): no import */
 				continue;
 			}
@@ -652,6 +775,10 @@ int chkNetFoldPeerCars(void)
 			 * keep waiting (or give up) on the same schedule. */
 			int slot0 = gChkNetPeerSlot[p];
 
+			/* The new car already lives in another slot (another player's, or a shared
+			 * one), so the vacated slot is not reused - offer it back normally. */
+			chkNetForgetVacated(p, "player's new car already has a slot");
+
 			if (JerCarSlotUsable(slot0) || chkImportHotLoad(slot0) > 0)
 			{
 				chkNetLoadRetryClear(p);
@@ -666,6 +793,72 @@ int chkNetFoldPeerCars(void)
 			}
 
 			continue;
+		}
+
+		/* A peer that CHANGED CAR has its old slot recorded (chkNetUnbindChangedPeers).
+		 * Reuse it IN PLACE before asking the canonical allocator for a spare: release the
+		 * old car, build the new one into the same slot, and keep the slot number. That is
+		 * what makes a change hold ONE slot instead of two - the old slot used to be
+		 * released only after mp had re-pointed the peer's body, so the new car took a
+		 * second slot in the meantime and three seats changing at once exhausted the pool. */
+		if (gChkNetVacatedSlot[p] >= 0)
+		{
+			int vs = gChkNetVacatedSlot[p];
+			CHK_CAR_ID old = gChkNetVacatedCar[p];
+			int stillOld = chkImportSlotHeld(vs) && chkCarIdEqual(chkImportSlotId(vs), old);
+			int wanted = chkNetCarWantedBy(old, NULL);
+
+			if (stillOld && !wanted && chkImportIsSpareSlot(vs))
+			{
+				if (chkNetTestRefuseLoad(p))
+				{
+					int now = chkNetLoadRetryArm(p);
+
+					if (now == CHK_NET_RETRY_FIRST)
+						jer_console_log("[carhacks/net] player %d's car (%s model %d) is waiting to be "
+							"rebuilt in its old slot - retrying",
+							p, chkNetCityName((int)gChkNetPeerPick[p].city),
+							(int)gChkNetPeerPick[p].model);
+
+					continue;
+				}
+
+				if (chkNetReuseVacated(p, vs, gChkNetPeerPick[p]))
+				{
+					gChkNetVacatedSlot[p] = -1;
+					gChkNetVacatedCar[p] = chkCarId(CHK_CITY_NATIVE, CHK_MODEL_NONE);
+					gChkNetPeerSlot[p] = vs;
+
+					folded++;
+					chkNetLoadRetryClear(p);
+
+					printInfo("[carhacks/net] player %d's car (%s model %d) -> resident slot %d (reused in place)\n",
+						p, chkNetCityName((int)gChkNetPeerPick[p].city),
+						(int)gChkNetPeerPick[p].model, vs);
+
+					continue;
+				}
+
+				/* Transient: the old car is back in the slot (chkNetReuseVacated restores
+				 * it) and the record stays, so the next beat tries the SAME slot again. We
+				 * do NOT fall through to a fresh canonical slot - that is the double-slot
+				 * transient this whole path exists to remove. */
+				{
+					int now = chkNetLoadRetryArm(p);
+
+					if (now == CHK_NET_RETRY_FIRST)
+						jer_console_log("[carhacks/net] player %d's car (%s model %d) could not be "
+							"rebuilt in its old slot yet - retrying",
+							p, chkNetCityName((int)gChkNetPeerPick[p].city),
+							(int)gChkNetPeerPick[p].model);
+				}
+
+				continue;
+			}
+
+			/* The old car is shared, the slot no longer holds it, or the slot is not a
+			 * spare any more: let the ordinary release decide about it, then allocate. */
+			chkNetForgetVacated(p, "vacated slot no longer reusable");
 		}
 
 		/* The slot is CANONICAL (chkImportCanonicalSlot), derived from every pick in
@@ -1292,7 +1485,12 @@ static int chkNetOnFrame(void* ud, void* args)
 		gChkNetSession = 1;
 
 		for (i = 0; i < CHK_NET_MAX_PLAYERS; i++)
+		{
 			gChkNetPeerPickSet[i] = 0;
+			gChkNetPeerSlot[i] = -1;
+			gChkNetVacatedSlot[i] = -1;
+			gChkNetVacatedCar[i] = chkCarId(CHK_CITY_NATIVE, CHK_MODEL_NONE);
+		}
 
 		/* and re-announce our own car, for the same reason the agreed set is dropped: a
 		 * second session must re-negotiate rather than inherit the last one */
@@ -1442,6 +1640,8 @@ static int chkNetOnFrame(void* ud, void* args)
 			{
 				gChkNetPeerPickSet[i] = 0;
 				gChkNetPeerSlot[i] = -1;
+				gChkNetVacatedSlot[i] = -1;
+				gChkNetVacatedCar[i] = chkCarId(CHK_CITY_NATIVE, CHK_MODEL_NONE);
 				chkNetLoadRetryClear(i);	/* no session: nothing to wait for */
 			}
 
@@ -1509,6 +1709,10 @@ void chkNetRegister(JERICHO_CONTEXT* ctx)
 	if (!gChkNetRegistered)
 	{
 		gChkNetRegistered = 1;
+
+		/* Statics start ZEROED, which reads as "peer slot 0 is vacated" and as a real car
+		 * id for the vacated-car record. Set the level state before any fold can run. */
+		chkNetOnLevelReset();
 
 		if (jer_net_register_channel(CHK_NET_CHANNEL, JER_NET_RELIABLE) < 0)
 			ctx->jer_log(ctx, "[carhacks/net] channel '" CHK_NET_CHANNEL "' refused\n");
