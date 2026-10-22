@@ -663,6 +663,20 @@ int chkCitySelectable(int city)
 	return 1;
 }
 
+/* The PLCHLDR row (the stand-in body), or -1 when this install has no such bank. */
+int chkPlaceholderCity(void)
+{
+	int city;
+
+	for (city = 0; city < chkCityCount(); city++)
+	{
+		if (strcmp(chkCityName(city), "PLCHLDR") == 0)
+			return city;
+	}
+
+	return -1;
+}
+
 int chkCityCount(void)
 {
 	return JerCityCount();

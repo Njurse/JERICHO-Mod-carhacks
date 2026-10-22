@@ -369,10 +369,57 @@ static int ChkMpChosen(void* userdata, void* args)
 	return JER_RESULT_CONTINUE;
 }
 
+/* JER_CARQ_STANDIN: a resident slot holding the placeholder body, so mp can draw
+ * it under a peer's car whose mesh is not built. It is DRAWN, never chosen: this
+ * never touches the import set's chosen car and tells the session nothing. -1 means
+ * no placeholder bank here, or no spare slot - mp falls back to the host car 1. */
+static int ChkMpStandIn(void* userdata, void* args)
+{
+	JER_CARQ_STANDIN_ARGS* a = (JER_CARQ_STANDIN_ARGS*)args;
+	CHK_CAR_ID id;
+	int city, slot, count = 0;
+
+	(void)userdata;
+
+	if (a == NULL)
+		return JER_RESULT_CONTINUE;
+
+	a->slot = -1;
+
+	city = chkPlaceholderCity();
+
+	if (city < 0)
+		return JER_RESULT_CONTINUE;
+
+	/* Already held (the player picked it, or an earlier stand-in import)? */
+	slot = chkImportSlotForCar(city, 4);
+
+	if (slot < 0)
+	{
+		id = chkCarId(city, 4);
+		slot = chkImportCanonicalSlot(id, &count);
+
+		if (slot >= 0)
+		{
+			chkImportSetSlot(slot, id);
+			chkImportHotLoad(slot);
+		}
+	}
+
+	if (slot >= 0 && chkImportSlotForCar(city, 4) == slot && JerCarSlotUsable(slot))
+		a->slot = slot;
+	else
+		printInfo("[carhacks/mp] stand-in: no resident slot for %s model 4 - mp draws the host car 1\n",
+			chkCityName(city));
+
+	return JER_RESULT_CONTINUE;
+}
+
 void chkMpLiveRegister(JERICHO_CONTEXT* ctx)
 {
 	ctx->jer_register_hook(ctx, JER_CARQ_CITIES, ChkMpCities, NULL, 0);
 	ctx->jer_register_hook(ctx, JER_CARQ_SLOTS, ChkMpSlots, NULL, 0);
 	ctx->jer_register_hook(ctx, JER_CARQ_LOAD, ChkMpLoad, NULL, 0);
 	ctx->jer_register_hook(ctx, JER_CARQ_CHOSEN, ChkMpChosen, NULL, 0);
+	ctx->jer_register_hook(ctx, JER_CARQ_STANDIN, ChkMpStandIn, NULL, 0);
 }

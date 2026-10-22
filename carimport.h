@@ -109,6 +109,9 @@ int chkCityAssetsPresent(int city);
 /* The picker's view of a city: chkCityAssetsPresent PLUS the placeholder rule. */
 int chkCitySelectable(int city);
 
+/* The PLCHLDR row (the stand-in body), or -1 when this install has no such bank. */
+int chkPlaceholderCity(void);
+
 /* The set's own slot holding (city, model), or -1. `city` < 0 matches any. */
 int chkImportSlotForCar(int city, int model);
 
