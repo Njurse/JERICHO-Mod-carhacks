@@ -247,11 +247,38 @@ static void ChkFillCarAvailability(void)
 static int gChkLoggedLevel = -1;
 static int gChkListLoggedLevel = -1;
 
+/* The Euro-43 beta is a runtime BANK, not one of the seven compile-time rows.
+ * Register it from its baked file so a bake is offered automatically, with no
+ * cities.ini edit: the file IS the opt-in. The engine keeps a module-owned row
+ * across its config refresh (a city_N key would take ownership instead), and
+ * BAKE_D1_CARS still writes one for tools/older engines.
+ *
+ * Paths are relative to the game's data folder (DRIVER2), exactly the spelling a
+ * city_N key uses, hence the leading ..\ . */
+static void ChkRegisterBetaBank(void)
+{
+	static int logged;
+	int city = JerCityRegister("BETAMIAMI",
+		"..\\JERICHO\\MODS\\carhacks\\D1CARS\\BETAMIAMI.LEV",
+		"..\\JERICHO\\MODS\\carhacks\\D1CARS\\BETAMIAMI.LCF");
+
+	if (city >= 0 && !logged)
+	{
+		logged = 1;
+		printInfo("[carhacks] Beta Miami registered as city %d from carhacks\\D1CARS\n", city);
+	}
+}
+
 static int ChkOnCarAvailability(void* ud, void* args)
 {
 	JER_ARGS_CAR_AVAILABILITY* a = (JER_ARGS_CAR_AVAILABILITY*)args;
 
 	(void)ud;
+
+	/* Before any list is built: a bake can appear while the game is running, and
+	 * the registry refresh that ran just before this hook would not have seen a
+	 * module-owned row yet. */
+	ChkRegisterBetaBank();
 
 	if (a == NULL)
 		return JER_RESULT_CONTINUE;
@@ -546,6 +573,11 @@ static int ChkOnCarPeerDraw(void* ud, void* args)
 void carhacks_register(JERICHO_CONTEXT* ctx)
 {
 	int i;
+
+	/* The Euro-43 beta bank, if a bake is on disk. Module-owned, so the city
+	 * registry's config refresh keeps it; registering here also makes it visible
+	 * before the first car list (cities.ini is not needed). */
+	ChkRegisterBetaBank();
 
 	for (i = 0; i < CHK_NET_MAX_PLAYERS; i++)
 	{
