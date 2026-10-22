@@ -15,3 +15,7 @@ __pycache__/
 # Local logs and packaged output
 *.log
 out/
+
+# Baked Driver 1 car data (BAKE_D1_CARS writes it here). Generated from the
+# player's own Driver 1 files: never commit it, never package it.
+D1CARS/

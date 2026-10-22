@@ -591,7 +591,7 @@ row. That is not a panel wearing the wrong colour; it is a city's entire car lis
 the level's colours.
 
 Driver 1 has seven car-data cities (MIAMI 4, FRISCO 5, LA 6, NEWYORK 7, NEWCASTLE 8, IVIEW 9, TRAIN 10 — the
-same seven `DRIVER\D1CARS\<CITY>.LEV` files `carimport.c` loads), so the bank is already
+same seven `JERICHO/MODS/carhacks/D1CARS/<CITY>.LEV` files the engine loads), so the bank is already
 oversubscribed. Measured when there were five (2026-10-12): importing all five at once
 refused **FRISCO and LA**, and every page check in the same run still reads `N of N polys
 resolve to a pinned imported page` — the cars load perfectly and come out the wrong colour.

@@ -100,13 +100,13 @@ other's colours"). See `PALETTES.md` §7.
   unconditionally — a plain Release install showed five cities whose every car failed to
   build ("in release the palettes on some vehicles from d1 are busted" was this, not a
   palette bug). One gate now covers all three surfaces: `chkCityAssetsPresent()`
-  (`carimport.c`) tests `DRIVER\D1CARS\<CITY>.LEV` with a RAW CWD-relative `fopen` — not
-  `FileExists()`, which resolves against `gDataFolder` and would probe
-  `DRIVER2\DRIVER\D1CARS\...` (the trap `jer_d1_file_exists` hit) — and
+  (`carimport.c`) requires the engine's registry row AND its level file to be
+  present (`JerCityRegistered()` + `JerCityFileExists()`) — and
   `chkFillCarTableFromImport`, `mplive.c`'s `ChkMpCities` and carselect's city row all
   gate on it. d1cars is a linked release module now, but the DATA is not shipped —
   the package carries the bake tools and `BAKE_D1_CARS.bat`, and the player bakes it
-  from their own Driver 1 copy into `DRIVER\D1CARS\`;
+  from their own Driver 1 copy into `JERICHO/MODS/carhacks/D1CARS/` (carhacks owns
+  the baked LEVs; the folder is generated and gitignored);
 - the D1 exporter's own freshness is a **separate workstream** (out of scope here).
 
 ## The in-game picker's city row (fixed)

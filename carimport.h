@@ -88,11 +88,12 @@ int chkImportEngineKnown(void);
  * number of cars the session needs. */
 int chkImportCanonicalSlot(CHK_CAR_ID car, int* outCount);
 
-/* Is this city's data on THIS install? Driver 2's own four always are; a Driver 1
- * car-data city answers only when DRIVER\D1CARS\<CITY>.LEV is really there, so a
- * machine without the Driver 1 content is never offered its cars. Every surface that
- * lists cities or their cars gates on this (the mp picker's city row, the frontend
- * roster row, chkFillCarTableFromImport). */
+/* Is this city's data on THIS install? Driver 2's own four always are; any other
+ * car-data city answers only when the engine has it registered AND its level file
+ * is really there (JERICHO/MODS/carhacks/D1CARS\<CITY>.LEV for Driver 1, or the
+ * configured path for a bank), so a machine without the baked content is never
+ * offered its cars. Every surface that lists cities or their cars gates on this
+ * (the mp picker's city row, the frontend roster row, chkFillCarTableFromImport). */
 int chkCityAssetsPresent(int city);
 
 /* The set's own slot holding (city, model), or -1. `city` < 0 matches any. */

@@ -620,19 +620,30 @@ int chkImportSlotModel(int city, int slot)
  * city shows) and any extras follow on 4. */
 /* Is this city's data actually on THIS install?
  *
- * The five Driver 1 car-data cities come from DRIVER\D1CARS, which is a SIBLING of
- * DRIVER2 and is only there when the Driver 1 content was baked and shipped (the
- * public release does not include it at all). Their car list is generated rather than
- * read - it has to be, because the frontend builds its list before the CD subsystem
- * comes up - so nothing was stopping a machine with no D1 data from being offered
- * D1 cars it cannot build. That is the report "in release the palettes on some
- * vehicles from d1 are busted": the pick fell back to the level's own vehicle.
+ * carhacks OWNS the baked Driver 1 car data: BAKE_D1_CARS writes the modded LEVs
+ * to JERICHO\MODS\carhacks\D1CARS (the player's own Driver 1 disc only supplies
+ * the source). A public release ships no baked data at all, and the folder is
+ * generated. Their car list is generated rather than read - it has to be,
+ * because the frontend builds its list before the CD subsystem comes up - so
+ * nothing was stopping a machine with no D1 data from being offered D1 cars it
+ * cannot build. That is the report "in release the palettes on some vehicles
+ * from d1 are busted": the pick fell back to the level's own vehicle.
  *
  * Driver 2's own cities are always present (their data is the level's own).
- *
- * NOT FileExists(): that resolves against gDataFolder ("DRIVER2\"), so it would probe
- * DRIVER2\DRIVER\D1CARS\... and always fail - the same trap jer_d1_file_exists hit in
- * the engine. Hence a raw, CWD-relative open. */
+ * Every other row must be registered AND its level file must be on disk; the
+ * stock Driver 1 rows are compile-time entries, so JerCityRegistered alone is
+ * not enough for them. */
+int chkCityAssetsPresent(int city)
+{
+	if (city < 0 || city >= CHK_CAR_CITY_COUNT)
+		return 0;
+
+	if (city < CITY_D2_COUNT)
+		return 1;
+
+	return JerCityRegistered(city) && JerCityFileExists(city, JER_CITY_FILE_LEVEL);
+}
+
 int chkCityCount(void)
 {
 	return JerCityCount();
@@ -643,35 +654,6 @@ int chkCityRegistered(int city)
 	return JerCityRegistered(city);
 }
 
-/* Is this city's car data HERE, on this install?
- *
- * Driver 2's own cities always are: their data is the level's own. Everything else
- * is a car-data source read from another folder - Driver 1's seven under DRIVER\,
- * and any runtime bank the config named - and the ENGINE's city registry already
- * answers for all of them: JerCityRegistered() is true only for a row whose file
- * actually opened, and the bank rows are re-probed before every car list and every
- * level load.
- *
- * That is the whole point of the registry: this function used to keep its OWN copy
- * of the file names (a DRIVER\D1CARS table), so a bank whose files were installed
- * was still invisible to every menu - the engine could have loaded it, nothing
- * would ever ask it to. Now the answer comes from the one place the engine reads
- * its paths from, so a bank is offered exactly when the engine can serve it.
- *
- * The reason this matters is unchanged: the frontend builds its list before a
- * level exists, so nothing was stopping a machine with no D1 data (or no bank) from
- * being offered cars it cannot build - the report "in release the palettes on some
- * vehicles from d1 are busted", where the pick fell back to the level's own car. */
-int chkCityAssetsPresent(int city)
-{
-	if (city < 0 || city >= CHK_CAR_CITY_COUNT)
-		return 0;
-
-	if (city < CITY_D2_COUNT)
-		return 1;
-
-	return JerCityRegistered(city);
-}
 void chkFillCarTableFromImport(int city)
 {
 	extern char carNumLookup[CITY_COUNT][10];

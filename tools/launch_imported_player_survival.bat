@@ -156,11 +156,11 @@ rem car". Models 5, 6 and 7 are a GAP in EVERY city (measured with levmodels.py 
 rem four .LEV files), so a request for one can never be satisfied. Refuse rather than
 rem launch something that cannot work, and do it BEFORE the dry exit so "dry" validates.
 rem A Driver 1 source city has no level: its transplanted car data is in
-rem DRIVER\D1CARS. Checking the D2 tree for it would refuse a car that
+rem JERICHO\MODS\carhacks\D1CARS. Checking the D2 tree for it would refuse a car that
 rem exists, or wave through one that does not.
 set "LEVFILE=%EXEDIR%\DRIVER2\LEVELS\"
 call :nameof %SRCIDX%
-if %SRCIDX% GEQ 4 set "LEVFILE=%EXEDIR%\DRIVER\D1CARS\"
+if %SRCIDX% GEQ 4 set "LEVFILE=%EXEDIR%\JERICHO\MODS\carhacks\D1CARS\"
 set "LEVFILE=%LEVFILE%%NAME%.LEV"
 if not exist "%~dp0levmodels.py" goto :skippedcheck
 if %SRCIDX% GEQ 4 goto :d1check
@@ -234,8 +234,8 @@ if /i "%N%"=="lasvegas" set "IDX=2"
 if /i "%N%"=="vegas"    set "IDX=2"
 if /i "%N%"=="rio"      set "IDX=3"
 rem Driver 1 car-data cities. They have no level of their own - their cars are
-rem the transplanted blobs in DRIVER\D1CARS, so this is a DATA source,
-rem not a place the game can be played.
+rem the transplanted blobs in JERICHO\MODS\carhacks\D1CARS, so this is a DATA
+rem source, not a place the game can be played.
 if /i "%N%"=="miami"   set "IDX=4"
 if /i "%N%"=="frisco"  set "IDX=5"
 if /i "%N%"=="la"      set "IDX=6"

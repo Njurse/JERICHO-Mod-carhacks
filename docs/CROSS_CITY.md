@@ -88,9 +88,10 @@ appears, delete them and it is gone.
 Nothing in carhacks needed a new code path for this: `import = 5:9:10` is the same
 policy shape as `import = 5:2:10`. What *did* change is where the answers come from:
 
-- `chkCityAssetsPresent` asks `JerCityRegistered` instead of keeping its own copy of
-  the `DRIVER\D1CARS\*.LEV` names; that duplicate table used to be the reason a bank
-  the engine could load was still invisible to every menu.
+- `chkCityAssetsPresent` asks the engine's city registry (`JerCityRegistered` plus
+  `JerCityFileExists`) instead of keeping its own copy of the
+  `JERICHO\MODS\carhacks\D1CARS\*.LEV` names; that duplicate table used to be the
+  reason a bank the engine could load was still invisible to every menu.
 - `chkFillCarTableFromImport` asks `JerCityCarModels(city)` — the bank's own
   `LUMP_CAR_MODELS`, loaded on demand — so a bank's roster is exactly the models it
   carries (a retexture pack that replaces two cars offers two).
