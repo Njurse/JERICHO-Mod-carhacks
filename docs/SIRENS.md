@@ -74,6 +74,11 @@ A D1/custom import with **no embedded sound bank** also returns `0`: there is
 no correct source-city siren sample to play, and a wrong siren is worse than a
 civilian car staying silent. Re-bake the city to get its siren.
 
+Before a level's sounds are loaded (`car_sound_ready == 0`), a D2 import also
+returns `0`. `cop_siren_sample[]` is only valid after `LoadLevelSFX()` has reset
+it and loaded the host/source banks; a pre-level query must not treat the
+zero-initialized array as "sample 0".
+
 ## 3. The D2 per-city siren mapping
 
 The four D2 cities are not a simple `69 + city` table. The stock loader used a
