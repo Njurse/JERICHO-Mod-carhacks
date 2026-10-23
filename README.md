@@ -77,7 +77,7 @@ snapshot and debugging it is debugging the wrong file.
 | `carimport.c` `carselect.c` `mplive.c` `net.c` `spawn.c` | the import, the car-select
 menu, the live in-game car queries, the session wiring, the spawn lever |
 | `docs/` | `CROSS_CITY.md`, `HACK.md`, `VEHICLES.md`, `PALETTES.md`, `VRAM.md`,
-`FORMATS.md` — carhacks' own copies (`FORMATS.md` came across from Caine's Crossfire and
+`FORMATS.md`, `SIRENS.md` — carhacks' own copies (`FORMATS.md` came across from Caine's Crossfire and
 lives here now) |
 | `tools/` | the `chk_*.sh` harnesses **and** the car-data tools
 (`vrammap.py`, `levgeom.py`, `levmodels.py`, `levpages.py`, `levpalette.py`,
@@ -296,6 +296,10 @@ D2 source city's siren bank is appended after the voice banks and its sample ind
 is recorded per city. The stock D2 mapping is kept (Chicago and Vegas share one
 siren bank; Havana and Rio have their own), so the imported car sounds like the
 city it came from.
+
+The full contract — both bank layouts, the resolution order, the D2
+city-to-bank table, hotload and rebuild behaviour, the horn/siren split, and the
+diagnostics — is in [`SIRENS.md`](docs/SIRENS.md).
 
 ### Verifying what landed, and reloading it if it did not
 
@@ -559,6 +563,7 @@ not - so confirm a citation before relying on the exact line:
 - [`FORMATS.md`](docs/FORMATS.md) — the level-file / lump formats
 - [`PALETTES.md`](docs/PALETTES.md) — car palettes and CLUT rows
 - [`VRAM.md`](docs/VRAM.md) — the VRAM layout and how to measure it
+- [`SIRENS.md`](docs/SIRENS.md) — engine/idle/horn vs siren banks, the per-city D2 siren mapping, playback and diagnostics
 
 This module's own docs:
 
