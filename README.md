@@ -256,20 +256,39 @@ written against, and it is what a peer needs to describe a car it is driving.
 A car's engine, idle and horn are three consecutive `SOUND_BANK_CARS` samples,
 selected by a bank id per model. Because a model number means a different vehicle
 in each city, the bank has to be looked up in the **source city's** table, not the
-host level's. `gamesnd.c` now does that (`MapCarModelToBank`) and, for imported
-slots, appends the source bank after the level's own and special banks and records
-the resulting sample block per resident slot (`LoadCarSoundForSlot`).
+host level's. `gamesnd.c` does that (`MapCarModelToBank`) and, for imported slots,
+appends the source bank after the level's own and special banks
+(`LoadCarSoundForSlot`).
+
+The engine keeps **one block per live resident slot**. `GetCarBankSample` is
+given the resident slot (the value in `cp->ap.model`), never a car-model number,
+so a model number that happens to equal another slot's index cannot select the
+wrong bank. A level can change cars indefinitely: when the next three-sample bank
+would fill `SOUND_BANK_CARS`, the engine rewinds to a checkpoint taken after the
+level's own and special banks and reloads every live imported slot. One block per
+slot therefore replaces the old append-per-change growth, and the full resident
+set fits (7 stock/special blocks + 11 further resident slots = 54 of 64 samples at
+the current 16-slot pool).
 
 That covers slots the stock loader never loaded, including the spare slots picks
 land in and cars hot-loaded after the level starts. Driver 1's transplanted cities
 go one step further: the synthetic `JERICHO/MODS/carhacks/D1CARS/*.LEV` files carry a
 `LUMP_CAR_SOUNDS` segment (type 201) with a three-sample bank per model, baked
-from `DRIVER/SOUND/VOICES.BLK`, and the engine prefers it. Driver 1 gave every car
-the same engine and idle, so the engine ignores the per-model entries and uses the
-city's first valid one for every D1 car, loaded once per level and shared by all D1
-slots. A synthetic LEV without that segment, or a runtime bank with no car-sound
-table, falls back to the host city's row for the same model number — an
-engine and idle loop rather than silence.
+from `DRIVER/SOUND/VOICES.BLK`, and the engine prefers it. Each imported D1 slot
+loads its own model's bank — engine, idle, and that model's horn or siren — under
+the same one-block-per-slot accounting. A synthetic LEV without that segment, or a
+runtime bank with no car-sound table, falls back to the host city's row for the
+same model number — an engine and idle loop rather than silence.
+
+The third sample has exactly one owner per car. A civilian import uses it for its
+horn. A bake-marked cop import uses it for its siren and has no separate horn:
+`CarHasSiren` returns that packed siren value, the normal horn paths are
+suppressed for the slot, and the AI/Doppler siren loop is authoritative. Stock
+specials keep their existing `SOUND_BANK_SFX` / `SOUND_BANK_VOICES` siren
+samples. An imported slot's siren decision comes only from the bake's siren mask;
+the stock "model 0 is the cop" rule is not applied to a D1/custom import, so a
+civilian model-0 import does not acquire a siren. A bank rebuild stops and
+re-issues active player and AI siren channels as well as the engine/idle loops.
 
 ### Verifying what landed, and reloading it if it did not
 
