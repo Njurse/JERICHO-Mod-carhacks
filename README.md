@@ -290,6 +290,13 @@ the stock "model 0 is the cop" rule is not applied to a D1/custom import, so a
 civilian model-0 import does not acquire a siren. A bank rebuild stops and
 re-issues active player and AI siren channels as well as the engine/idle loops.
 
+A Driver 2 cop imported from another city uses that **source city's** siren, not
+the host level's. The host siren is sample 0 of `SOUND_BANK_VOICES`; each imported
+D2 source city's siren bank is appended after the voice banks and its sample index
+is recorded per city. The stock D2 mapping is kept (Chicago and Vegas share one
+siren bank; Havana and Rio have their own), so the imported car sounds like the
+city it came from.
+
 ### Verifying what landed, and reloading it if it did not
 
 A car's palette rows and texture pages are established **deferred** — the page is
