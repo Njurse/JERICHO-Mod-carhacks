@@ -450,14 +450,23 @@ static int ChkOnCarDataSource(void* ud, void* args)
 		/* the session's agreed set, if one arrived (no-op without a session) */
 		chkNetApplyAgreedSet();
 
+		/* Write the set into the ENGINE's arrays BEFORE anything asks which cities are
+		 * live. JerReleaseUnusedCarImports (called by the peer fold below) answers
+		 * "does any resident slot still name this city?" from residentCarModels[] /
+		 * gCarModelSource[], and SetupResidentModels has just reset both to the level's
+		 * own (-1 sources). Writing the set afterwards therefore made the fold release
+		 * the very city the set had just named: on a re-entry (restart, retry, quick
+		 * replay, film director) that freed the page pins and palette rows the built
+		 * imported car still draws with, which is the "car came back untextured" report.
+		 * The fold's own hot loads only ADD slots, so writing the set first is safe. */
+		chkImportApplyToCarData(a->count, a->models, a->modelSource);
+
 		/* and what OUR players drive: folding a peer's car in here means the level
 		 * reads that vehicle, so a peer is drawn as their own car rather than as
 		 * whatever this level happens to hold in the slot they were adopted into.
 		 * A peer's car may come from any city -- the set is per-slot, so it adds to
 		 * whatever the config and the pick already named. */
 		chkNetFoldPeerCars();
-
-		chkImportApplyToCarData(a->count, a->models, a->modelSource);
 
 		chkImportSetEngineModels(NULL, 0);	/* hook-only pointer: drop it */
 	}

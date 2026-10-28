@@ -57,6 +57,50 @@ making the fold apply it mid-match *regressed* (273 refusals vs 17) because the 
 re-model needs the deferred ordering first, so that half was reverted. Measured: `mp_carstress`
 3 seats / 60 s = 114 REUSED / 27 fresh, 21 refusals, coverage 41/41/41, no dumps.
 
+## Level re-entry: restart, retry, quick replay, film director (2026-10-27)
+
+All four pause-menu endings re-enter the SAME level through `State_GameComplete` with
+`NewLevel = 0`: Restart and Retry Mission (`GAMEMODE_RESTART`), Quick Replay
+(`GAMEMODE_REPLAY`) and Film Director (`GAMEMODE_DIRECTOR`). `main.c` has a headless lever for
+each: `-restart <frame>`, `-quickreplay <frame>`, `-director <frame>`.
+
+**Measured baseline (before the fix), CHICAGO with `import = 5:2:3` and `-car 3`:**
+
+```
+[carhacks] verify: slot 5 health: 316 poly(s), 300 on an imported page, 4 palette row(s) uploaded, 0 bad palette row(s)
+JERICHO-RESTART: requesting GAMEMODE_RESTART on frame 300
+cross-city: VEGAS palette table gave back its CLUT band (rows 515..572) to the lower pool
+cross-city: VEGAS palette state forgotten - 4 (city,set) row(s) and its cached wheel CLUT ids released
+cross-city: VEGAS city state forgotten - page lists, deferred palette lump, pin-dropped records and palette rows released; reloadable on demand
+cross-city: released VEGAS - no live car names it, so its palette rows, pages and buffer are free for another city
+[carhacks] import: slot 5 <- model 3 from VEGAS
+[carhacks] import set: level CHICAGO, guest cities 1, 1 entry, version 4
+cross-city: palette state cleared for the new level (0 lump(s) were deferred by the previous one)
+[carhacks] verify: slot 5 health: 316 poly(s), 0 on an imported page, 0 palette row(s) uploaded, 0 bad palette row(s)
+[carhacks] verify: slot 5 (city 2 model 3) is corrupt - ...; reloading (attempt 1/3)   (x3)
+[carhacks] verify: slot 5 (city 2 model 3) still corrupt after 3 reload(s) - ... Leaving it as-is.
+```
+
+The module re-applied the same set, but the engine had already released the guest city and then
+ran the destructive `CarImportResetState()`/`FreeCarImport()` path because `gCarImportCity` was
+`-1`: the built model kept its geometry and lost its pages and palette rows.
+
+**Acceptance criteria for every one of the four flows (fresh build, same harness):**
+
+- The engine must not print `cross-city: palette state cleared for the new level` nor
+  `released VEGAS - no live car names it` for a city the re-entered level still names.
+- The re-entry line is `cross-city: re-entry (NewLevel=0) - keeping N held car-data city/cities; nothing is freed`.
+- The module reports the level start once:
+  `[carhacks] level start: N imported slot(s) held, engine agrees on N (verifier reset)`.
+- The verifier after the re-entry keeps the pre-entry numbers, e.g.
+  `[carhacks] verify: slot 5 health: 316 poly(s), 300 on an imported page, 4 palette row(s) uploaded, 0 bad palette row(s)`,
+  and prints **no** `is corrupt` / `still corrupt after` line.
+- The flow itself is visible as `JERICHO-RESTART` / `JERICHO-QUICKREPLAY` / `JERICHO-DIRECTOR`,
+  and for Quick Replay / Film Director `glaunch.c` still logs its own mode lines.
+- Pedestrian equivalent after the same re-entry: `[pedhacks] archive: level N - engine reset
+  detected (generation A -> B), re-installing` followed by
+  `[pedhacks] archive: level N - installed (generation B)`; no `Jericho import failed` line.
+
 ## The 2026-10-11 palette pass (make it provable first, then fix it)
 
 The palette work began by making the failure **provable**, because the acceptance suite was
