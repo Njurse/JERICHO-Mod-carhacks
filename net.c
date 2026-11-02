@@ -131,9 +131,6 @@ static void chkNetMapCities(int tag, unsigned char* p, int len, int (*fn)(int))
 			for (at = 1; at + 2 < len; at += 3)
 				p[at + 1] = (unsigned char)fn(p[at + 1]);
 			break;
-				p[at + 1] = (unsigned char)fn(p[at + 1]);
-			}
-			break;
 
 		case CHK_NET_SET:
 			if (len >= 1)
