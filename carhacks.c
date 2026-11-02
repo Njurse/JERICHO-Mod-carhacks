@@ -273,6 +273,9 @@ static void ChkRegisterBetaBank(void)
 	}
 }
 
+/* packbanks.c: enabled data mods' banks/<dir>/bank.json, registered like Beta Miami. */
+extern void chkPackBanksRefresh(void);
+
 static int ChkOnCarAvailability(void* ud, void* args)
 {
 	JER_ARGS_CAR_AVAILABILITY* a = (JER_ARGS_CAR_AVAILABILITY*)args;
@@ -283,6 +286,7 @@ static int ChkOnCarAvailability(void* ud, void* args)
 	 * the registry refresh that ran just before this hook would not have seen a
 	 * module-owned row yet. */
 	ChkRegisterBetaBank();
+	chkPackBanksRefresh();
 
 	if (a == NULL)
 		return JER_RESULT_CONTINUE;
@@ -601,6 +605,7 @@ void carhacks_register(JERICHO_CONTEXT* ctx)
 	 * registry's config refresh keeps it; registering here also makes it visible
 	 * before the first car list (cities.ini is not needed). */
 	ChkRegisterBetaBank();
+	chkPackBanksRefresh();
 
 	for (i = 0; i < CHK_NET_MAX_PLAYERS; i++)
 	{
