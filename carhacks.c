@@ -634,6 +634,8 @@ void carhacks_register(JERICHO_CONTEXT* ctx)
 	 * addon net bridge, so a session can agree which city each machine reads its
 	 * car data from. Every call inside is a no-op with no session. */
 	chkNetRegister(ctx);
+	/* how a city is spelled on every MP wire (net.c's and mp's): by bank NAME past row 10 */
+	chkCityWireRegister(ctx);
 
 	/* the live "Change car" bridge (mplive.c): answers mp's custom events asking
 	 * which cities the session can offer, and asking for one car to be made

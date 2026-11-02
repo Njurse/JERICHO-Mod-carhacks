@@ -100,7 +100,7 @@ static unsigned char gChkNetAgreed[CHK_NET_SET_MAX];
 static int gChkNetAgreedLen;
 static int gChkNetAgreedGuest = -1;
 
-static unsigned char gChkNetBuf[64];
+static unsigned char gChkNetBuf[512];	/* NAMES can carry 16 bank names */
 
 /* Is the session's set AGREEMENT on? carhacks.ini: mp_agree_imports (default 1).
  * Off = every machine keeps its own import set, which is what a session where
@@ -114,6 +114,50 @@ static int chkNetAgreeEnabled(void)
 /* ---------------------------------------------------------------------------
  * Sending
  * ------------------------------------------------------------------------- */
+
+/* Every [city] byte of a payload, by tag (see net.h), mapped through `fn`. */
+static void chkNetMapCities(int tag, unsigned char* p, int len, int (*fn)(int))
+{
+	int at;
+
+	switch (tag)
+	{
+		case CHK_NET_PICK:
+			if (len >= 1)
+				p[0] = (unsigned char)fn(p[0]);
+			break;
+
+		case CHK_NET_CARS:
+			for (at = 1; at + 2 < len; at += 3)
+				p[at + 1] = (unsigned char)fn(p[at + 1]);
+			break;
+				p[at + 1] = (unsigned char)fn(p[at + 1]);
+			}
+			break;
+
+		case CHK_NET_SET:
+			if (len >= 1)
+				p[0] = (unsigned char)fn(p[0]);
+			for (at = 3; at + 2 < len; at += 3)
+				p[at + 1] = (unsigned char)fn(p[at + 1]);
+			break;
+
+		default:
+			break;
+	}
+}
+
+/* Advertised with every pick heartbeat: which names this machine spells as which codes. */
+static int chkNetSendPacket(int tag, const unsigned char* payload, int payloadLen);
+
+static void chkNetSendNames(void)
+{
+	unsigned char pay[400];
+	int len = chkCityWireBuildNames(pay, (int)sizeof(pay));
+
+	if (len > 0)
+		chkNetSendPacket(CHK_NET_NAMES, pay, len);
+}
 
 static int chkNetSendPacket(int tag, const unsigned char* payload, int payloadLen)
 {
@@ -131,6 +175,10 @@ static int chkNetSendPacket(int tag, const unsigned char* payload, int payloadLe
 			payloadLen = (int)sizeof(gChkNetBuf) - len;
 
 		memcpy(gChkNetBuf + len, payload, (size_t)payloadLen);
+
+		/* Callers build payloads in LOCAL city indices; respell them for the session. */
+		if (tag != CHK_NET_NAMES)
+			chkNetMapCities(tag, gChkNetBuf + len, payloadLen, chkCityToWire);
 		len += payloadLen;
 	}
 
@@ -789,6 +837,16 @@ int chkNetFoldPeerCars(void)
 				continue;
 			}
 
+			/* A bank this machine does not hold (or whose name code is ambiguous in the
+			 * session): the wire city stays an opaque code >= CITY_COUNT. Nothing to
+			 * import - the peer is drawn with the stand-in, never as another car. */
+			if (pcity >= CITY_COUNT)
+			{
+				chkNetForgetVacated(p, "car from a bank not held here");
+				chkNetLoadRetryClear(p);
+				continue;
+			}
+
 			if (pcity < 0)
 				pcity = GameLevel;	/* CHK_CITY_NATIVE = the level's own city */
 
@@ -1302,6 +1360,8 @@ static void chkNetBroadcastCars(void)
  * Inbound
  * ------------------------------------------------------------------------- */
 
+static unsigned char gChkNetRecv[1024];
+
 static int chkNetOnRecv(void* ud, void* args)
 {
 	JER_ARGS_NET_RECV* a = (JER_ARGS_NET_RECV*)args;
@@ -1316,16 +1376,44 @@ static int chkNetOnRecv(void* ud, void* args)
 	if (a->len < 2)
 		return JER_RESULT_CONTINUE;
 
-	p = (const unsigned char*)a->data;
+	if (a->len > (int)sizeof(gChkNetRecv))
+		return JER_RESULT_CONTINUE;
 
-	if (p[0] != CHK_NET_WIRE_VERSION)
+	/* Read a COPY, with every city respelled into this machine's rows. */
+	memcpy(gChkNetRecv, a->data, (size_t)a->len);
+	p = gChkNetRecv;
+	tag = p[1];
+
+	if (p[0] == CHK_NET_WIRE_VERSION)
+	{
+		if (tag == CHK_NET_NAMES)
+		{
+			chkCityWireOnNames(p + 2, a->len - 2);
+			return JER_RESULT_CONTINUE;
+		}
+		chkNetMapCities(tag, gChkNetRecv + 2, a->len - 2, chkCityFromWire);
+	}
+	else if (p[0] == 1)
+	{
+		/* An older carhacks spells every city by ITS OWN row number: only rows 0..10
+		 * mean the same car here. A bank row from it is read as "not held". The mp
+		 * protocol refuses such a peer anyway (MP_PROTO_VERSION 21); this is for a
+		 * relay or a test rig that still carries one. */
+		static int warned;
+
+		if (!warned)
+		{
+			warned = 1;
+			printInfo("[carhacks/net] a peer speaks car wire v1: only its stock-city cars are trusted\n");
+		}
+		chkNetMapCities(tag, gChkNetRecv + 2, a->len - 2, chkCityFromWireV1);
+	}
+	else
 	{
 		printInfo("[carhacks/net] ignoring a message with wire version %d (mine is %d)\n",
 			(int)p[0], CHK_NET_WIRE_VERSION);
 		return JER_RESULT_CONTINUE;
 	}
-
-	tag = p[1];
 
 	switch (tag)
 	{
@@ -1460,7 +1548,9 @@ static int chkNetOnRecv(void* ud, void* args)
 
 				memcpy(gChkNetAgreed, p + 2, (size_t)len);
 				gChkNetAgreedLen = len;
-				gChkNetAgreedGuest = (gChkNetAgreed[0] == CHK_CITY_NATIVE) ? -1 : (int)gChkNetAgreed[0];
+				/* a guest city this machine does not hold (an opaque wire code) is no guest */
+				gChkNetAgreedGuest = (gChkNetAgreed[0] == CHK_CITY_NATIVE || gChkNetAgreed[0] >= CITY_COUNT)
+					? -1 : (int)gChkNetAgreed[0];
 
 				printInfo("[carhacks/net] the host's agreed set arrived: %d entr%s "
 					"(applied at the next level)\n",
@@ -1519,6 +1609,8 @@ void chkNetAdvertisePick(int city, int model)
 
 	pay[0] = (unsigned char)city;
 	pay[1] = (unsigned char)model;
+
+	chkNetSendNames();
 
 	if (chkNetSendPacket(CHK_NET_PICK, pay, 2))
 		printInfo("[carhacks/net] told the session: %s model %d\n",
@@ -1750,6 +1842,7 @@ static int chkNetOnFrame(void* ud, void* args)
 		gChkNetAgreedGuest = -1;
 
 		printInfo("[carhacks/net] session ended - back to the local import set\n");
+		chkCityWireReset();
 
 		/* The unload: this machine is going back to the frontend, so there is no map any
 		 * more and nothing cross-city may stay held. Everything goes back - the slots

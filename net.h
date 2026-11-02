@@ -31,6 +31,11 @@
  *         [playerId][city][model]       machine knows who drives what
  *   SET   [guestCity][count][version] - the host's agreed import set
  *         then count x [slot][city][model]
+ *   NAMES [count] then count x          - (v2) which bank name each code means
+ *         [code][len][name]               on the sender
+ *
+ * Every [city] byte above is a WIRE city (chkCityToWire): 0..10 stock index,
+ * 0x80..0xFE a bank's name code, 0xFF the level's own. Never a raw row 11+.
  *
  * 2 + max(1 + 8*3) = 27 bytes at most, against the bridge's 1024-byte cap.
  */
@@ -44,15 +49,29 @@
 /* The bridge channel. <= 15 chars (jer_net.h). */
 #define CHK_NET_CHANNEL		"carhacks.car"
 
-#define CHK_NET_WIRE_VERSION	1
+/* 2: a city byte >= 11 is a NAME code (citywire.c, JER_CARQ_CITYWIRE), not this
+ *    machine's row; adds CHK_NET_NAMES. A v1 message is still read, but only its
+ *    stock cities (0..10) are trusted. */
+#define CHK_NET_WIRE_VERSION	2
 
 enum
 {
 	CHK_NET_REQ  = 1,	/* a client asks the host for the set and the car table */
 	CHK_NET_PICK = 2,	/* a peer reports the car it is driving */
 	CHK_NET_SET  = 3,	/* the host's agreed import set */
-	CHK_NET_CARS = 4	/* the host's per-player car table */
+	CHK_NET_CARS = 4,	/* the host's per-player car table */
+	CHK_NET_NAMES = 5	/* v2: the bank names this machine spells as which codes */
 };
+
+/* citywire.c - the session spelling of a city (see jer_carquery.h). */
+int  chkCityWireCodeForName(const char* name);
+int  chkCityToWire(int city);
+int  chkCityFromWire(int wire);
+int  chkCityFromWireV1(int raw);
+int  chkCityWireBuildNames(unsigned char* out, int max);
+void chkCityWireOnNames(const unsigned char* p, int len);
+void chkCityWireReset(void);
+void chkCityWireRegister(JERICHO_CONTEXT* ctx);
 
 /* Register the channel and its inbound hook. Called from carhacks_register.
  * Safe to call more than once (a module reload re-runs it). */
