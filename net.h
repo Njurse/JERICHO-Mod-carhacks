@@ -113,7 +113,7 @@ int chkNetAgreedGuestCity(void);
 /* ---- who is driving what ------------------------------------------------- */
 
 /* Player ids are the bridge's: 0 = host, 1.. = clients. */
-#define CHK_NET_MAX_PLAYERS	8
+#define CHK_NET_MAX_PLAYERS	16	/* = mp MP_MAX_PLAYERS (mp_proto.h): every seat the session can hand out */
 
 /* What the LOCAL player is driving, read from the engine (the car's resident
  * slot, the city that slot's data came from - CHK_CITY_NATIVE for the level's
