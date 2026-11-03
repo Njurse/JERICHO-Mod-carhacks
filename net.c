@@ -1466,7 +1466,9 @@ static int chkNetOnRecv(void* ud, void* args)
 			break;
 
 		case CHK_NET_CARS:
-			if (a->len < 4)
+			/* the table is the host's (chkNetBroadcastCars): a client takes it from the
+			 * host (player 0) alone, and the host keeps its own */
+			if (a->len < 4 || jer_net_is_host() || a->peer != 0)
 				break;
 
 			{
