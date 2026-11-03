@@ -1466,7 +1466,9 @@ static int chkNetOnRecv(void* ud, void* args)
 			break;
 
 		case CHK_NET_CARS:
-			if (a->len < 4)
+			/* the table is the host's (chkNetBroadcastCars): a client takes it from the
+			 * host (player 0) alone, and the host keeps its own */
+			if (a->len < 4 || jer_net_is_host() || a->peer != 0)
 				break;
 
 			{
@@ -1531,7 +1533,9 @@ static int chkNetOnRecv(void* ud, void* args)
 			break;
 
 		case CHK_NET_SET:
-			if (a->len < 5)
+			/* only the host publishes a set (chkNetPublishSet): a client takes it from
+			 * the host (player 0) alone, and the host keeps its own */
+			if (a->len < 5 || jer_net_is_host() || a->peer != 0)
 				break;
 
 			/* store the payload verbatim for the NEXT level load: the engine
