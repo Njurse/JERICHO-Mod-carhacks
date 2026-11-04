@@ -1,0 +1,6 @@
+# Portrait pages are exact 4bpp bytes. A checkout that rewrites newlines
+# would change the page the frontend uploads.
+assets/portraits/**/*.raw binary
+assets/portraits/**/*.png binary
+assets/portraits/**/*.clut binary
+D1CARS/*.portraits/*.raw binary
