@@ -396,5 +396,18 @@ The `.raw` is one 4bpp page, 128 bytes a row, 256 rows; only the top 219 are
 uploaded. Indices are into the CARBACK portrait CLUT unless the `.clut` is
 present: 16 little-endian RGB555 colours, written over `(960,256)` after
 CARBACK loads. The filename is the model number (`3.raw`), not the frontend
-slot. No file, or a file of any other size, leaves the stock lookup alone
-(Driver 2 slot art, or a blank icon for every other city).
+slot. Omit the `.clut` when the indices were packed for that stock CLUT.
+
+No file, or a file of any other size, leaves the stock lookup alone for
+Driver 2 cities 0–3: the slot in `CCARS.RAW` / `HCARS.RAW` / `VCARS.RAW` /
+`RCARS.RAW` still draws. Every other city, and a model those ten slots do
+not name, draws one shared page instead of a blank icon:
+
+```
+JERICHO\MODS\carhacks\assets\portraits\CARHACKS\fallback.raw
+```
+
+That path is `<gD1DataFolder>assets\portraits\CARHACKS\fallback.raw`
+(`gD1DataFolder` is `JERICHO\MODS\carhacks\`). It is the same 32768-byte
+page, indexed for the CARBACK CLUT, with no `.clut` beside it. Miami's own
+pages and how a screenshot becomes one are in [`PORTRAITS.md`](PORTRAITS.md).
