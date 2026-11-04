@@ -49,7 +49,9 @@ The city's **own** frontend list: slots `0..9` where `CarAvailability[city][slot
 is non-zero, with the model number from `carNumLookup[city][slot]`. So a foreign
 city shows its own availability, not the level's. The icon is the engine's own
 (`JER_FE_MENU.get_preview` returns the car's **own** city + model), so a Havana car
-previews with Havana's art while the level is Chicago.
+previews with Havana's art while the level is Chicago. A bank or a Driver 1 city
+has no `CCARS.RAW`; the host draws a page dropped beside that city's `.LEV` when
+one is there (`docs/FORMATS.md` §9). This menu only names the city and the model.
 
 **Who fills that table changed — this module owns it now.** The stock version starts
 as `{1,1,1,1,0,0,0,0,0,0}` for every city and lifts the tail slots only for a
@@ -73,9 +75,13 @@ Two honest limits:
 
 - The **stock** screen draws its icon by SLOT — `SetupExtraPoly(gfxNames[GameLevel],
   carSelection, 0)` — so on that screen a `car_list` remap shows the slot's stock art
-  rather than the remapped car's. This module's own screen draws by the car's own city +
-  model and is unaffected, and it is the default. The car the player gets is right either
-  way; only the picture differs.
+  rather than the remapped car's. This module's own screen asks for the car's own city +
+  model. On a Driver 2 city with no portrait file that still resolves to the stock
+  page of the slot that model now occupies, so a remap can show the previous
+  occupant's art. A `<LEV stem>.portraits/<model>.raw` beside the city's `.LEV`
+  wins over that page. The car the player gets is right either way; only the
+  picture differs. Driver 1 cities and banks have no stock page, so they stay
+  blank until that file is there.
 - A car whose data cannot be found still fails at PICK time rather than being hidden from
   the list: the pick path says so in words ("needs a spare resident slot and none is
   free", "riding the level's own car of that number"). Availability cannot answer "is this

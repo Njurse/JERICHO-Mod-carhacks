@@ -12,9 +12,12 @@
  *
  * The roster row sits directly BELOW the car row, as asked. The stock screen only
  * ever shows the LEVEL's own car list (carNumLookup[GameLevel]); this one lets
- * the player browse any of the four cities' lists. The icon stays the engine's
+ * the player browse any of the four cities' lists. The icon is the engine's
  * own car-select art for the car's OWN city (JER_FE_MENU.get_preview), so a
- * Havana car previews with Havana's art while the level is Chicago.
+ * Havana car previews with Havana's art while the level is Chicago. A bank or
+ * a Driver 1 city has no CCARS.RAW: the host draws <LEV stem>.portraits/<model>.raw
+ * when that file sits beside the city's .LEV (see CARSELECT.md). This menu only
+ * names the city and the model.
  *
  * Nothing about the engine's ASSET LOADING is changed. The stock screen still
  * runs its setup - which is what computes CarAvailability and loads the icon
@@ -343,7 +346,9 @@ static int chkSelAdjust(void* ud, int dir)
 }
 
 /* The car icon: the picked car's OWN city + model, so the engine draws that
- * city's art whatever level we are in. */
+ * city's art whatever level we are in. For a Driver 2 city with no portrait
+ * file that is the stock slot page. For a bank or a Driver 1 city it is
+ * <LEV stem>.portraits/<model>.raw beside the .LEV, when the file is there. */
 static void chkSelPreview(void* ud, int* city, int* model)
 {
 	CHK_ROSTER_ENTRY list[CHK_ROSTER_MAX];
