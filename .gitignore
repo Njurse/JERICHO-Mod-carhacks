@@ -18,4 +18,8 @@ out/
 
 # Baked Driver 1 car data (BAKE_D1_CARS writes it here). Generated from the
 # player's own Driver 1 files: never commit it, never package it.
-D1CARS/
+# Authored car-select pages are the exception: JerFeShowPortrait reads
+# <stem>.portraits/<model>.raw from this same folder.
+D1CARS/*
+!D1CARS/*.portraits/
+!D1CARS/*.portraits/**
