@@ -139,9 +139,10 @@ int chkImportSlotForCar(int city, int model);
  * do not exist. */
 int chkCityCount(void);
 
-/* The four cities whose car list is the ENGINE's own (FEmain.c's carNumLookup). They
- * are the only rows where model 0 means the POLICE CAR rather than an empty slot --
- * see the exemption in chkImportCanOffer. */
+/* The four cities whose car list is the ENGINE's own (FEmain.c's carNumLookup).
+ * Model 0 is the police car there. A generated or bank row uses the same number
+ * when its mask's bit 0 is set; an unused slot on that row is -1, and an all-zero
+ * row has not been filled. See chkImportCanOffer. */
 #define CHK_NATIVE_CITY_COUNT	4
 
 /* 1 when that city row is real (always true for 0..8). */
@@ -181,7 +182,7 @@ typedef enum CHK_OFFER
 {
 	CHK_OFFER_OK = 0,	/* offer it */
 	CHK_OFFER_BAD,		/* not a city or slot this game has */
-	CHK_OFFER_NO_CAR	/* the slot names no car (model 0, or -1 = none here) */
+	CHK_OFFER_NO_CAR	/* the slot names no car (-1, or a 0 that is an unfilled hole) */
 } CHK_OFFER;
 
 /* Give a city with no frontend car list of its own the cars its IMPORTED data

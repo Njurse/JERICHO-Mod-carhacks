@@ -110,6 +110,6 @@ An extracted copy of the installed truck is checked in under
 
 The bank itself: `BIGRIG.LEV` + `BIGRIG.LCF` and its handling profile are deliberately
 left for a follow-up, so the numbers above can be judged first. When it is baked, the
-truck wants model **1** (carhacks treats model 0 as "no car"), clean geometry repeated
+truck wants model **1** (model 0 is a real car, the cop, when the bank's mask includes it), clean geometry repeated
 for damaged and low, and the four sets above ripped from `CHICAGO.LEV` — which is
 exactly what `bankfill.py`'s page/palette machinery already does.
