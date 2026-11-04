@@ -371,3 +371,30 @@ print(total, sets)
   line. A stale `REDRIVER2.log` from an older build name may sit beside it: do not grep
   it, and a `taskkill` on a late-flushed run throws the session away. Capturing the run's
   stdout is the safe read.
+
+---
+
+## 9. Car-select portrait (not a lump)
+
+The frontend icon is **not** in the `.LEV`. Stock Driver 2 keeps one file per
+city, `DATA\CARS\{C,H,V,R}CARS.RAW`. `SetupExtraPoly` (`FEmain.c`) treats it as
+ten pages of `0x8000` bytes, uploads page `slot` to VRAM `(896,256)` as a
+64×219 rectangle (4bpp: 256 texels wide, 219 tall) and draws a 255×219 sprite
+with the CLUT `LoadBackgroundFile("DATA\\CARS\\CARBACK.RAW")` leaves at
+`(960,256)`.
+
+A custom bank and a Driver 1 city have no such file. The car-select menu passes
+a city and a **model number**; the host then looks beside the `.LEV`
+`JerCityPath` opens:
+
+```
+<lev directory>/<LEV stem>.portraits/<model>.raw     exactly 32768 bytes
+<lev directory>/<LEV stem>.portraits/<model>.clut    optional, exactly 32 bytes
+```
+
+The `.raw` is one 4bpp page, 128 bytes a row, 256 rows; only the top 219 are
+uploaded. Indices are into the CARBACK portrait CLUT unless the `.clut` is
+present: 16 little-endian RGB555 colours, written over `(960,256)` after
+CARBACK loads. The filename is the model number (`3.raw`), not the frontend
+slot. No file, or a file of any other size, leaves the stock lookup alone
+(Driver 2 slot art, or a blank icon for every other city).
