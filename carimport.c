@@ -577,6 +577,21 @@ const char* chkCityName(int city)
 	return LevelNames[city];
 }
 
+/* 1 when this generated row's 0 is a real model 0, not the all-zero unfilled
+ * state. A filled row has another slot set: a later model, or the -1 tail
+ * chkFillCarTableFromImport writes past the last car. */
+static int chkRowNamesModel0(int city)
+{
+	extern char carNumLookup[CITY_COUNT][10];
+	int slot;
+
+	for (slot = 0; slot < CHK_CAR_SLOT_COUNT; slot++)
+		if (carNumLookup[city][slot] != 0)
+			return 1;
+
+	return 0;
+}
+
 /* ---- what a car list may offer -----------------------------------------
  *
  * The rule, and why it is only this, is argued in carimport.h. In one line: the engine's
@@ -597,18 +612,21 @@ CHK_OFFER chkImportCanOffer(int city, int slot)
 
 	model = chkImportSlotModel(city, slot);
 
-	/* MODEL 0 IS THE POLICE CAR in the engine's own car list. FEmain.c's
-	 * carNumLookup row is {1,2,3,4,0,8,9,10,11,12}, so model 0 sits at select-slot
-	 * 4 and `model <= 0 -> NO_CAR` refused it -- which is why the police cars
-	 * disappeared from every car menu while the rest of the list was fine.
+	/* MODEL 0 IS THE POLICE CAR. FEmain.c's row is {1,2,3,4,0,8,9,10,11,12}, so
+	 * the cop sits at select-slot 4, and `model <= 0 -> NO_CAR` used to drop it.
 	 *
-	 * The zero-means-empty reading is still right for a GENERATED (Driver 1) city,
-	 * whose table is filled from its own data and leaves 0 in a hole, so the
-	 * exemption is only for the four cities whose list is the engine's. */
+	 * A generated or bank row is the same number when the city's mask has bit 0
+	 * set (dumpycops is only that car; demohavana's cop is model 0; retail D1
+	 * Miami instead pins its cop to model 1, which lands in roster slot 0).
+	 * 0 is also what an UNFILLED row is full of, and what a hole used to be.
+	 * chkFillCarTableFromImport writes -1 into the unused tail, so a row that
+	 * names model 0 has some other slot non-zero. An all-zero row has not been
+	 * filled and is not a cop. The four engine cities are already that shape:
+	 * their 0 has real models around it. */
 	if (model < 0)
 		return CHK_OFFER_NO_CAR;
 
-	if (model == 0 && city >= CHK_NATIVE_CITY_COUNT)
+	if (model == 0 && city >= CHK_NATIVE_CITY_COUNT && !chkRowNamesModel0(city))
 		return CHK_OFFER_NO_CAR;
 
 	/* A car the game's DATA does not carry, even though the level's car LIST names it.
@@ -629,8 +647,9 @@ int chkImportSlotModel(int city, int slot)
 	if (city < 0 || city >= CHK_CAR_CITY_COUNT || slot < 0 || slot >= CHK_CAR_SLOT_COUNT)
 		return 0;
 
-	/* SIGNED: 0 is "no car in this slot at all" (the table has holes), and -1 is "the
-	 * level has no car of this number". Both refuse, for different reasons. */
+	/* SIGNED. -1 is an unused slot on a generated row. 0 is model 0 (the cop)
+	 * when the row names one, and an unfilled hole when the whole row is still
+	 * zero. chkImportCanOffer is what tells those apart. */
 	return (int)(signed char)carNumLookup[city][slot];
 }
 
@@ -646,9 +665,10 @@ int chkImportSlotModel(int city, int slot)
  * transplant (tools/bake.py) and is OURS to change. So the list is read from the
  * import instead - "these were imported, so offer them".
  *
- * Ascending model onto ascending slot, which reproduces Driver 2's frontend
- * semantics for free: models 1,2,3,4 land on select-slots 0..3 (the four a stock
- * city shows) and any extras follow on 4. */
+ * Ascending model onto ascending slot, starting at model 0. Retail D1 Miami's
+ * mask has no bit 0, so models 1,2,3,4 land on select-slots 0..3 and its cop
+ * (model 1) is roster slot 0. A bank whose mask includes model 0 puts that cop
+ * in slot 0 and the rest after it. */
 /* Is this city's data actually on THIS install?
  *
  * carhacks OWNS the baked Driver 1 car data: BAKE_D1_CARS writes the modded LEVs
@@ -722,7 +742,7 @@ void chkFillCarTableFromImport(int city)
 {
 	extern char carNumLookup[CITY_COUNT][10];
 	unsigned present;
-	int slot, model;
+	int slot, model, filled;
 
 	if (city < 0 || city >= CHK_CAR_CITY_COUNT)
 		return;
@@ -769,6 +789,9 @@ void chkFillCarTableFromImport(int city)
 
 	slot = 0;
 
+	/* Bit 0 is model 0, the cop. Do not start at 1: a bank whose mask is only
+	 * that bit (or whose first car is the cop) would offer nothing, or would
+	 * offer every car except the cop. */
 	for (model = 0; model < CHK_MODEL_LIMIT && slot < CHK_CAR_SLOT_COUNT; model++)
 	{
 		if (!(present & (1u << model)))
@@ -777,8 +800,19 @@ void chkFillCarTableFromImport(int city)
 		carNumLookup[city][slot++] = (char)model;
 	}
 
+	if (slot == 0)
+		return;				/* bits set, but none in 0..12; leave the row unfilled */
+
+	filled = slot;
+
+	/* Unused tail is -1, not 0. A real model 0 is stored as 0; leaving the rest
+	 * of the row 0 made a cop-only bank indistinguishable from "no list", and
+	 * made chkImportCanOffer refuse that 0 as a hole. */
+	for (; slot < CHK_CAR_SLOT_COUNT; slot++)
+		carNumLookup[city][slot] = (char)-1;
+
 	printInfo("[carhacks] car list: %s had no list of its own - offering the %d car(s) its imported data carries\n",
-		chkCityName(city), slot);
+		chkCityName(city), filled);
 }
 
 const char* chkOfferReason(CHK_OFFER why)
