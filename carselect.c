@@ -246,8 +246,9 @@ static void chkCityLabel(void* ud, char* out, int max)
 /* ---------------------------------------------------------------------------
  * Palette: the colour variant the player's car spawns in (main.c's
  * defaultPlayerPalette, which InitCar clamps to the model and mp saves as [mp]
- * palette). The count is the SELECTED model's: a Driver 1 car or a special has one
- * palette and reads 1/1, so nothing is offered that it would break on.
+ * palette). The count is CarModelPaletteCount for the selected model. A Driver 2
+ * special is 1/1. A Driver 1 body (models 1..4 and 8..12) is 6/6; a column the
+ * lump never wrote repeats at draw, it is not another car's paint.
  * ------------------------------------------------------------------------- */
 extern u_char defaultPlayerPalette;
 
