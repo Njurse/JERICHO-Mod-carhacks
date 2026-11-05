@@ -15,10 +15,10 @@
  * the player browse any of the four cities' lists. The icon is the engine's
  * own car-select art for the car's OWN city (JER_FE_MENU.get_preview), so a
  * Havana car previews with Havana's art while the level is Chicago. A bank or
- * a Driver 1 city has no CCARS.RAW: the host draws <LEV stem>.portraits/<model>.raw
- * when that file sits beside the city's .LEV, and the shared CARHACKS fallback
- * when it does not (see docs/PORTRAITS.md). This menu only names the city and
- * the model.
+ * a Driver 1 city has no CCARS.RAW: the host draws page <model> of
+ * <LEV stem>.RAW beside the city's .LEV when that page is not empty, else
+ * <LEV stem>.portraits/<model>.raw, else the shared CARHACKS fallback
+ * (see docs/PORTRAITS.md). This menu only names the city and the model.
  *
  * Nothing about the engine's ASSET LOADING is changed. The stock screen still
  * runs its setup - which is what computes CarAvailability and loads the icon
@@ -347,10 +347,10 @@ static int chkSelAdjust(void* ud, int dir)
 }
 
 /* The car icon: the picked car's OWN city + model, so the engine draws that
- * city's art whatever level we are in. For a Driver 2 city with no portrait
- * file that is the stock slot page. For a bank or a Driver 1 city it is
- * <LEV stem>.portraits/<model>.raw beside the .LEV, or the shared CARHACKS
- * fallback when that file is missing. */
+ * city's art whatever level we are in. The host prefers <stem>.RAW page
+ * <model>, then <stem>.portraits/<model>.raw. A Driver 2 city with neither
+ * keeps the stock slot page. A bank or a Driver 1 city with neither draws
+ * the shared CARHACKS fallback. */
 static void chkSelPreview(void* ud, int* city, int* model)
 {
 	CHK_ROSTER_ENTRY list[CHK_ROSTER_MAX];

@@ -384,21 +384,29 @@ with the CLUT `LoadBackgroundFile("DATA\\CARS\\CARBACK.RAW")` leaves at
 `(960,256)`.
 
 A custom bank and a Driver 1 city have no such file. The car-select menu passes
-a city and a **model number**; the host then looks beside the `.LEV`
-`JerCityPath` opens:
+a city and a **model number** (not the roster cursor). The host then looks
+beside the `.LEV` `JerCityPath` opens:
 
 ```
-<lev directory>/<LEV stem>.portraits/<model>.raw     exactly 32768 bytes
-<lev directory>/<LEV stem>.portraits/<model>.clut    optional, exactly 32 bytes
+<lev directory>/<LEV stem>.RAW                          page at model * 0x8000
+<lev directory>/<LEV stem>.portraits/<model>.raw        exactly 32768 bytes
+<lev directory>/<LEV stem>.portraits/<model>.clut       optional, exactly 32 bytes
 ```
 
-The `.raw` is one 4bpp page, 128 bytes a row, 256 rows; only the top 219 are
-uploaded. Indices are into the CARBACK portrait CLUT unless the `.clut` is
-present: 16 little-endian RGB555 colours, written over `(960,256)` after
-CARBACK loads. The filename is the model number (`3.raw`), not the frontend
-slot. Omit the `.clut` when the indices were packed for that stock CLUT.
+`<stem>.RAW` is the packed file a car-bank bake writes next to the LEV/LCF.
+Page `model` is `0x8000` bytes at offset `model * 0x8000`. An all-zero page,
+or a file that does not reach that page, is skipped. The loose `.raw` is the
+same page and is what loads when the RAW is missing. Miami ships only the
+loose files (`MIAMI.portraits/<model>.raw`); there is no `MIAMI.RAW` to migrate.
 
-No file, or a file of any other size, leaves the stock lookup alone for
+The page is 4bpp, 128 bytes a row, 256 rows; only the top 219 are uploaded.
+Indices are into the CARBACK portrait CLUT unless the `.clut` is present: 16
+little-endian RGB555 colours, written over `(960,256)` after CARBACK loads.
+The filename and the RAW index are the model number (`3.raw`, offset
+`3 * 0x8000`), not the frontend slot. The RAW does not carry CLUTs. Omit the
+`.clut` when the indices were packed for that stock CLUT.
+
+No page, or a loose file of any other size, leaves the stock lookup alone for
 Driver 2 cities 0–3: the slot in `CCARS.RAW` / `HCARS.RAW` / `VCARS.RAW` /
 `RCARS.RAW` still draws. Every other city, and a model those ten slots do
 not name, draws one shared page instead of a blank icon:
