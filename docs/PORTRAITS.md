@@ -1,14 +1,27 @@
 # Car-select portraits
 
 The icon beside the car-select menu is not in the `.LEV`. The host draws one
-32768-byte 4bpp page per model:
+32768-byte 4bpp page per **model** (the in-game model, not the roster cursor).
 
-```
-<directory of the .LEV>/<LEV stem>.portraits/<model>.raw
-```
+It looks beside the `.LEV`, in this order:
+
+1. `<LEV stem>.RAW` page at offset `model * 0x8000`, when that file exists and
+   the page is not all zero. A car-bank bake writes this next to the LEV/LCF.
+   Stock `CCARS.RAW` uses the roster cursor; this file uses the model, which
+   is the number the menu already passes. The RAW is not a lump.
+2. `<directory of the .LEV>/<LEV stem>.portraits/<model>.raw` — the loose page.
+   The bake still writes this too. A hand-dropped folder still works.
+3. Driver 2 cities 0–3: that model's stock `CCARS` / `HCARS` / `VCARS` /
+   `RCARS` slot.
+4. The shared CARHACKS fallback, below.
+
+A `<model>.clut` in the portraits folder replaces the CARBACK CLUT for the
+draw. The packed RAW does not contain CLUTs. An all-zero RAW page is empty,
+so the loose page for that model still shows.
 
 `JERICHO\MODS\carhacks\D1CARS\MIAMI.LEV` opens
-`JERICHO\MODS\carhacks\D1CARS\MIAMI.portraits\1.raw` for model 1. The page is
+`JERICHO\MODS\carhacks\D1CARS\MIAMI.portraits\1.raw` for model 1. There is no
+`MIAMI.RAW` in this tree, and these pages do not need to move. The page is
 256x256 at 4bpp (128 bytes a row). The frontend uploads the top 219 rows to
 VRAM `(896,256)` and draws a 255x219 sprite. Colours come from the portrait
 CLUT in `DATA\CARS\CARBACK.RAW`, at VRAM `(960,256)` after
@@ -18,6 +31,16 @@ CLUT in `DATA\CARS\CARBACK.RAW`, at VRAM `(960,256)` after
 A `<model>.clut` (32 bytes) beside the page replaces that CLUT. Leave it out
 when the indices were packed for the stock colours. Shipping one would paint
 the page through a different palette and is how a matched portrait gets crushed.
+
+## `handling.json` `portrait`
+
+The bake reads `portrait` from `cars/<id>/handling.json`. The path is relative
+to that file. It may be a pre-packed `.raw` of exactly `0x8000` bytes, or a
+`.png`, `.tga`, or `.bmp`. A raster is converted into the page at bake. A
+mode-P PNG whose first 16 palette entries are already the frontend CARBACK
+CLUT, in index order, is packed as those indices and is not re-quantised.
+The bake then writes that page at offset `model * 0x8000` in `<stem>.RAW`
+and as the loose `<model>.raw`.
 
 ## Miami model numbers
 
@@ -48,13 +71,18 @@ bytes sit next to the source PNGs under
 `assets/portraits/MIAMI/portraits/`. `D1CARS/*.LEV` stays untracked; only the
 `.portraits` folders are checked in.
 
+Leave them there. A packed `MIAMI.RAW` would use the **in-game model** column
+(`1.raw` at offset `0x8000`, `8.raw` at `8 * 0x8000`), not the roster slot.
+The Driver 1 city bake does not write that file, so nothing here moves.
+
 ## Already on the frontend CLUT
 
 Jaret's MIAMI PNGs, `fallback.png`, and `template.png` are mode-P, 256x219.
 Their first 16 palette entries are the CARBACK portrait CLUT in index order
 (a PNG saver keeps the low 3 bits; `(channel >> 3) << 3` is the colour the
 CLUT displays). `pack` writes those indices straight into the 4bpp page and
-pads rows 219..255 with index 0. It does not re-quantise.
+pads rows 219..255 with index 0. It does not re-quantise. A `portrait`
+PNG the bake is given in that same shape is packed the same way.
 
 A handful of texels use a palette slot above 15 whose colour is the same
 RGB555 black as CLUT entry 0. Those fold to entry 0. Keeping the low nibble
@@ -115,9 +143,10 @@ The host builds that as `<gD1DataFolder>assets\portraits\CARHACKS\fallback.raw`
 (`gD1DataFolder` is `JERICHO\MODS\carhacks\`). It is packed from
 `fallback.png` the same way as the Miami pages, for the stock CLUT.
 
-Driver 2 cities 0-3 are not covered by it. With no `<model>.raw` they keep
-the `CCARS` / `HCARS` / `VCARS` / `RCARS` slot. An override page in
-`<stem>.portraits` still wins, on those cities too.
+Driver 2 cities 0-3 are not covered by it. With no `<stem>.RAW` page and no
+`<model>.raw` they keep the `CCARS` / `HCARS` / `VCARS` / `RCARS` slot. A
+non-empty page in `<stem>.RAW` wins first. An override page in
+`<stem>.portraits` still wins over the stock slot, on those cities too.
 
 A missing fallback file leaves the icon blank and logs once:
 `[frontend] portrait: <CITY> model <N> no art, fallback missing (<path>)`.
