@@ -398,6 +398,9 @@ Page `model` is `0x8000` bytes at offset `model * 0x8000`. An all-zero page,
 or a file that does not reach that page, is skipped. The loose `.raw` is the
 same page and is what loads when the RAW is missing. Miami ships only the
 loose files (`MIAMI.portraits/<model>.raw`); there is no `MIAMI.RAW` to migrate.
+The bake's input is `portrait` in `cars/<id>/handling.json`: a pre-packed
+`.raw` (`0x8000` bytes) or a `.png`, `.tga`, or `.bmp` it converts. A mode-P
+PNG already on the frontend CLUT is packed as indices.
 
 The page is 4bpp, 128 bytes a row, 256 rows; only the top 219 are uploaded.
 Indices are into the CARBACK portrait CLUT unless the `.clut` is present: 16
