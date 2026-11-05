@@ -148,11 +148,14 @@ static int chkSpawnOnFrame(void* ud, void* args)
 		 * those two as well). m[0][0]/m[2][0] would be the SIDE, which is the wall. */
 		d = spacing * (placed + 1);
 
-		/* The engine's own rule (PingInCivCar, and cainescrossfire's spawn): a
-		 * recolourable civilian body (model 0..4) takes a palette 0..5, anything
-		 * else is single-palette. Different colours per car so they can be told
-		 * apart at a glance. */
-		palette = (residentCarModels[i] >= 0 && residentCarModels[i] <= 4) ? (placed % 6) : 0;
+		/* Same gate InitCar clamps with. A one-paint body stays on 0. A Driver 1
+		 * traffic body on models 8..12 has the six civ columns, so the lineup is
+		 * not all the page CLUT. */
+		{
+			int nPal = CarSlotPaletteCount(i);
+
+			palette = (nPal > 1) ? (placed % nPal) : 0;
+		}
 		pos[0] = pcp->hd.where.t[0] + (int)(((long long)pcp->hd.where.m[0][2] * d) >> 12);
 		pos[1] = pcp->hd.where.t[1];
 		pos[2] = pcp->hd.where.t[2] + (int)(((long long)pcp->hd.where.m[2][2] * d) >> 12);
