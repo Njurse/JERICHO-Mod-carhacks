@@ -32,6 +32,16 @@ A `<model>.clut` (32 bytes) beside the page replaces that CLUT. Leave it out
 when the indices were packed for the stock colours. Shipping one would paint
 the page through a different palette and is how a matched portrait gets crushed.
 
+## `handling.json` `portrait`
+
+The bake reads `portrait` from `cars/<id>/handling.json`. The path is relative
+to that file. It may be a pre-packed `.raw` of exactly `0x8000` bytes, or a
+`.png`, `.tga`, or `.bmp`. A raster is converted into the page at bake. A
+mode-P PNG whose first 16 palette entries are already the frontend CARBACK
+CLUT, in index order, is packed as those indices and is not re-quantised.
+The bake then writes that page at offset `model * 0x8000` in `<stem>.RAW`
+and as the loose `<model>.raw`.
+
 ## Miami model numbers
 
 `MCARS.RAW_N` is page N of Driver 1's Miami car-select raw, in source-car
@@ -71,7 +81,8 @@ Jaret's MIAMI PNGs, `fallback.png`, and `template.png` are mode-P, 256x219.
 Their first 16 palette entries are the CARBACK portrait CLUT in index order
 (a PNG saver keeps the low 3 bits; `(channel >> 3) << 3` is the colour the
 CLUT displays). `pack` writes those indices straight into the 4bpp page and
-pads rows 219..255 with index 0. It does not re-quantise.
+pads rows 219..255 with index 0. It does not re-quantise. A `portrait`
+PNG the bake is given in that same shape is packed the same way.
 
 A handful of texels use a palette slot above 15 whose colour is the same
 RGB555 black as CLUT entry 0. Those fold to entry 0. Keeping the low nibble
