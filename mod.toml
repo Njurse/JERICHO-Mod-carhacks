@@ -1,6 +1,6 @@
 id = "carhacks"
 name = "Car Hacks"
-version = "0.2.7"
+version = "0.2.8"
 # the JERICHO interface (SDK) this mod is built against
 interface = 3
 author = "JERICHO"
