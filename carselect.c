@@ -36,6 +36,15 @@
  * players on its own chain, and the roster is offered so a joining player picks a
  * car, but Ride hands the launch back to mp rather than starting it
  * (JER_EVENT_MP_FRONTEND). See MP_ADAPTER.md.
+ *
+ * ROLE CARS. A session whose game mode wants one car per role (jer_carquery.h
+ * JER_CARQ_ROLES; Cops n Robbers: a patrol car, then a getaway car) gets the
+ * same menu once per role: the heading names the role, the roster shows only
+ * the role's pool (police / not police, the engine's JerCarIsPolice), and the
+ * Ride row reads Next until the last role. Each confirmed pick is reported
+ * (JER_CARQ_ROLEPICK); only the last launches, with the car of the role the
+ * session names (`launch`). Triangle steps back one role. A session that does
+ * not answer, or a mode without roles, gets exactly the one-pick menu.
  */
 
 #include "driver2.h"
@@ -56,6 +65,8 @@
 #include "cars.h"		/* CarModelPaletteCount: how many palettes a model has */
 #include "carimport.h"
 #include "net.h"
+#include "models.h"		/* JerCarIsPolice: a role's pool (police / not police) */
+#include "jer_carquery.h"	/* JER_CARQ_ROLES / JER_CARQ_ROLEPICK: the session's role cars */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -114,6 +125,13 @@ static int gChkForceMenu;	/* harness: CHK_FORCE_MENU - walk to the car screen */
 static int gChkRosterLoggedCity = -1;	/* the city whose roster was last described */
 static int gChkRosterLoggedCount = -1;	/* ...and what it offered then */
 
+/* Role cars (JER_CARQ_ROLES): 0 = one ordinary pick. */
+static JER_CARQ_ROLES_ARGS gChkRoles;
+static int gChkRoleStep;			/* the role being picked, 0..count-1 */
+static int gChkRolePickCity[JER_CARQ_ROLES_MAX];
+static int gChkRolePickModel[JER_CARQ_ROLES_MAX];
+static int gChkRolePickPalette[JER_CARQ_ROLES_MAX];
+
 static JER_FE_ITEM gChkItems[CHK_ROW_COUNT];
 static JER_FE_MENU gChkMenu =
 {
@@ -139,6 +157,35 @@ static JER_FE_MENU gChkMenu =
  * earlier would hand back the previous level's list.
  * ------------------------------------------------------------------------- */
 
+/* The pool of the role being picked; ANY outside a role step. */
+static int chkRolePool(void)
+{
+	if (gChkRoles.count <= 0 || gChkRoleStep < 0 || gChkRoleStep >= gChkRoles.count)
+		return JER_CARQ_POOL_ANY;
+
+	return gChkRoles.roles[gChkRoleStep].pool;
+}
+
+static int chkPoolKeeps(int pool, int city, int model)
+{
+	switch (pool)
+	{
+	case JER_CARQ_POOL_POLICE:
+		return JerCarIsPolice(city, model) != 0;
+	case JER_CARQ_POOL_CIVILIAN:
+		return JerCarIsPolice(city, model) == 0;
+	default:
+		return 1;
+	}
+}
+
+/* The heading: the role's title in a role step, the stock one otherwise. */
+static void chkRoleTitle(void)
+{
+	gChkMenu.title = (gChkRoles.count > 0 && gChkRoleStep >= 0 && gChkRoleStep < gChkRoles.count)
+		? gChkRoles.roles[gChkRoleStep].title : "SELECT CAR";
+}
+
 static int chkRosterBuild(int city, CHK_ROSTER_ENTRY* out, int max)
 {
 	int n = 0, slot;
@@ -146,18 +193,40 @@ static int chkRosterBuild(int city, CHK_ROSTER_ENTRY* out, int max)
 	if (city < 0 || city >= CHK_CITY_COUNT)
 		return 0;
 
-	for (slot = 0; slot < CHK_SLOTS; slot++)
+	/* A role step shows the role's pool only. A pool this city cannot fill (no
+	 * police car in its list) shows the whole list instead of nothing: the
+	 * session refuses that pick and puts the player in a car of its own at the
+	 * round start (mp's MpModeFilterPool makes the same call). */
 	{
-		if (CarAvailability[city][slot] == 0)
-			continue;
+		int pool = chkRolePool();
+		int want = 0;
 
-		if (out != NULL && n < max)
+		for (slot = 0; pool != JER_CARQ_POOL_ANY && slot < CHK_SLOTS; slot++)
+			if (CarAvailability[city][slot] != 0 &&
+				chkPoolKeeps(pool, city, (int)(unsigned char)carNumLookup[city][slot]))
+				want++;
+
+		if (want == 0)
+			pool = JER_CARQ_POOL_ANY;
+
+		for (slot = 0; slot < CHK_SLOTS; slot++)
 		{
-			out[n].slot = slot;
-			out[n].model = (int)(unsigned char)carNumLookup[city][slot];
-		}
+			int model = (int)(unsigned char)carNumLookup[city][slot];
 
-		n++;
+			if (CarAvailability[city][slot] == 0)
+				continue;
+
+			if (!chkPoolKeeps(pool, city, model))
+				continue;
+
+			if (out != NULL && n < max)
+			{
+				out[n].slot = slot;
+				out[n].model = model;
+			}
+
+			n++;
+		}
 	}
 
 	/* Say what is NOT on offer, when a city's roster CHANGES rather than once per city: the
@@ -382,6 +451,8 @@ static void chkSelPreview(void* ud, int* city, int* model)
  * in (players.c, InitPlayer). Nothing else about the launch changes, so the
  * level's asset loading is untouched - which is the whole reason the choice can
  * be replaced without touching the load. */
+static int chkRideModel(int city, int model);
+
 static int chkRideWith(int city, int idx)
 {
 	CHK_ROSTER_ENTRY list[CHK_ROSTER_MAX];
@@ -404,12 +475,25 @@ static int chkRideWith(int city, int idx)
 	gChkRosterCity = city;
 	chkClampCursor();
 
+	printInfo("[carhacks] car select: RIDE %s slot %d -> model %d\n",
+		chkCityName(city), list[idx].slot, list[idx].model);
+
+	return chkRideModel(city, list[idx].model);
+}
+
+/* Start the level with (city, model): the part of Ride after the roster lookup,
+ * shared with a role step's launch. */
+static int chkRideModel(int city, int model)
+{
+	if (city < 0 || city >= CHK_CITY_COUNT || model < 0)
+		return 0;
+
 	/* the pick is the module's single source of truth for "the player's car":
 	 * carhacks.c turns it into the level's cross-city import (carimport.c) */
-	chkImportSetLocalPick(city, list[idx].model);
+	chkImportSetLocalPick(city, model);
 
 	/* and tell a session, so the host can fold it into the agreed set (net.c) */
-	chkNetAdvertisePick(city, list[idx].model);
+	chkNetAdvertisePick(city, model);
 
 	/* wantedCar[] holds a MODEL (mission.c matches it against the model each resident slot
 	 * carries, and players.c derives the slot from it), which is why the menu writes the
@@ -417,11 +501,10 @@ static int chkRideWith(int city, int idx)
 	 * time, and the engine's own import preference resolves the model to it later. A change
 	 * that wrote the slot here (and at the import) has been reverted: it made a guest pick
 	 * resolve to no model and fall back to the level's first car. */
-	wantedCar[0] = list[idx].model;
+	wantedCar[0] = model;
 
-	printInfo("[carhacks] car select: RIDE %s slot %d -> model %d (level city %s) wantedCar=%d\n",
-		chkCityName(city), list[idx].slot, list[idx].model,
-		chkCityName(GameLevel), wantedCar[0]);
+	printInfo("[carhacks] car select: RIDE %s model %d (level city %s) wantedCar=%d\n",
+		chkCityName(city), model, chkCityName(GameLevel), wantedCar[0]);
 
 	/* A LIVE SESSION OWNS THE LAUNCH. mp seats players on its own car screen and
 	 * claims the frontend's START, so starting the level from here would load it
@@ -458,6 +541,88 @@ static int chkRideWith(int city, int idx)
 	return 1;
 }
 
+/* "Ride", or "Next" while a role step has more roles after it. */
+static void chkRideLabel(void* ud, char* out, int max)
+{
+	(void)ud;
+
+	if (gChkRoles.count > 0 && gChkRoleStep < gChkRoles.count - 1)
+		snprintf(out, max, "Next");
+	else
+		snprintf(out, max, "Ride");
+}
+
+/* A role step's Ride: keep the pick, tell the session, and either move on to the
+ * next role or launch with the car of the role the session named. */
+static int chkRoleRide(int city, int idx)
+{
+	CHK_ROSTER_ENTRY list[CHK_ROSTER_MAX];
+	JER_CARQ_ROLEPICK_ARGS pick;
+	int n, step = gChkRoleStep, launch;
+
+	n = chkRosterBuild(city, list, CHK_ROSTER_MAX);
+
+	if (idx < 0 || idx >= n)
+	{
+		jer_console_log("[carhacks] car select: %s refused - no car %d in %s's roster (%d available)",
+			gChkRoles.roles[step].title, idx, chkCityName(city), n);
+		return 0;
+	}
+
+	gChkRolePickCity[step] = city;
+	gChkRolePickModel[step] = list[idx].model;
+	gChkRolePickPalette[step] = (int)defaultPlayerPalette;
+
+	memset(&pick, 0, sizeof(pick));
+	pick.role = step;
+	pick.city = city;
+	pick.model = list[idx].model;
+	pick.palette = (int)defaultPlayerPalette;
+	jer_fire(JER_CARQ_ROLEPICK, &pick);
+
+	printInfo("[carhacks] car select: %s = %s slot %d -> model %d (%s)\n",
+		gChkRoles.roles[step].title, chkCityName(city), list[idx].slot, list[idx].model,
+		pick.ok ? "the session kept it" : "the session did not keep it");
+
+	if (step < gChkRoles.count - 1)
+	{
+		gChkRoleStep = step + 1;
+		gChkCarIdx = 0;
+		chkRoleTitle();
+		chkClampCursor();
+		jer_frontend_refresh();
+		return 1;
+	}
+
+	/* the last role: launch with the session's named role's car */
+	launch = (gChkRoles.launch >= 0 && gChkRoles.launch < gChkRoles.count) ? gChkRoles.launch : 0;
+	defaultPlayerPalette = (u_char)gChkRolePickPalette[launch];
+
+	printInfo("[carhacks] car select: %d role car(s) picked - launching with the %s\n",
+		gChkRoles.count, gChkRoles.roles[launch].title);
+
+	return chkRideModel(gChkRolePickCity[launch], gChkRolePickModel[launch]);
+}
+
+/* Triangle in a role step past the first: back to the previous role. Otherwise
+ * the engine's own back (the screen this menu stands in for). */
+static int chkSelBack(void* ud)
+{
+	(void)ud;
+
+	if (gChkRoles.count > 0 && gChkRoleStep > 0)
+	{
+		gChkRoleStep--;
+		gChkCarIdx = 0;
+		chkRoleTitle();
+		chkClampCursor();
+		jer_frontend_refresh();
+		return 1;
+	}
+
+	return 0;
+}
+
 /* Cross on a row. Back is NOT here: the Back row is an engine is_back row and
  * Triangle is the engine's own back, so both take the stock car screen's own
  * previous-screen pop - the menu replaced that screen (jer_frontend_open_replace)
@@ -467,7 +632,12 @@ static int chkSelActivate(void* ud)
 	int row = (int)(size_t)ud;
 
 	if (row == CHK_ROW_RIDE)
+	{
+		if (gChkRoles.count > 0)
+			return chkRoleRide(gChkRosterCity, gChkCarIdx);
+
 		return chkRideWith(gChkRosterCity, gChkCarIdx);
+	}
 
 	return 0;
 }
@@ -519,6 +689,34 @@ void chkCarSelectArm(void)
 	gChkRosterCity = (GameLevel >= 0 && GameLevel < CHK_CITY_COUNT) ? GameLevel : 0;
 	gChkCarIdx = 0;
 	gChkArmed = 1;
+
+	/* Role cars: ask the session (mp answers from its game mode). Nobody
+	 * answering - no session, a mode without roles - is count 0: one pick. */
+	memset(&gChkRoles, 0, sizeof(gChkRoles));
+	gChkRoleStep = 0;
+
+	if (inSession)
+	{
+		jer_fire(JER_CARQ_ROLES, &gChkRoles);
+
+		if (gChkRoles.count < 0 || gChkRoles.count > JER_CARQ_ROLES_MAX)
+			gChkRoles.count = 0;
+
+		if (gChkRoles.count > 0)
+		{
+			int i;
+
+			for (i = 0; i < gChkRoles.count; i++)
+				gChkRoles.roles[i].title[JER_CARQ_ROLE_TITLE_MAX - 1] = 0;
+
+			printInfo("[carhacks] car select: the session wants %d role car(s): %s%s%s (launch with %d)\n",
+				gChkRoles.count, gChkRoles.roles[0].title,
+				gChkRoles.count > 1 ? ", then " : "", gChkRoles.count > 1 ? gChkRoles.roles[1].title : "",
+				gChkRoles.launch);
+		}
+	}
+
+	chkRoleTitle();
 
 	printInfo("[carhacks] car select: armed for level %s (%s)\n",
 		chkCityName(gChkRosterCity),
@@ -636,6 +834,8 @@ static int chkSelOnFrontendEntered(void* ud, void* args)
 	gChkInFrontend = 1;
 	gChkFrontendFrames = 0;
 	gChkCarIdx = 0;
+	gChkRoleStep = 0;
+	chkRoleTitle();
 
 	return JER_RESULT_CONTINUE;
 }
@@ -705,7 +905,7 @@ void chkCarSelectRegister(JERICHO_CONTEXT* ctx)
 	gChkItems[CHK_ROW_PALETTE].submenu = -1;
 
 	/* Ride */
-	gChkItems[CHK_ROW_RIDE].label = "Ride";
+	gChkItems[CHK_ROW_RIDE].get_label = chkRideLabel;	/* "Ride", or "Next" between role cars */
 	gChkItems[CHK_ROW_RIDE].userdata = (void*)(size_t)CHK_ROW_RIDE;
 	gChkItems[CHK_ROW_RIDE].on_activate = chkSelActivate;
 	gChkItems[CHK_ROW_RIDE].submenu = -1;
@@ -719,6 +919,7 @@ void chkCarSelectRegister(JERICHO_CONTEXT* ctx)
 	gChkItems[CHK_ROW_BACK].submenu = -1;
 
 	gChkMenu.get_preview = chkSelPreview;
+	gChkMenu.on_back = chkSelBack;	/* a role step steps back; otherwise the engine's own back */
 
 	/* No on_back: Triangle falls through to the engine's own previous-screen pop
 	 * (FEmain.c), which is exactly what Back does. A menu that stands in for a
