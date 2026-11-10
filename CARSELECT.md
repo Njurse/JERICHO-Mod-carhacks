@@ -173,6 +173,31 @@ spawns; each city needs a palette block, and the bank holds three
 (`civ_clut` rows 8..31). See `CROSS_CITY.md` for the mechanism and `MP_ADAPTER.md`
 for what that means in a session.
 
+## Role cars (one pick per role)
+
+A session's game mode can ask for more than one car. On arm in a session the
+menu fires `JER_CARQ_ROLES` (`jer_carquery.h`); mp answers from the mode's role
+slots (Cops n Robbers: `PATROL CAR` from the police cars, then `GETAWAY CAR`
+from the rest) with the count, each role's title and pool, and which role's car
+the level launches with. Nobody answering is `count = 0`: one ordinary pick.
+
+With roles the menu is walked once per role:
+
+- the heading is the role's title;
+- the roster is cut to the role's pool by the engine's own answer,
+  `JerCarIsPolice(city, model)` (core `models.c`: model 0 in a Driver 2 city,
+  the bake's cop-siren flags in a car-mod or Driver 1 bank). A city with no car
+  in the pool shows its whole list; mp refuses a pick outside the pool and
+  falls back to its own car for the role;
+- the Ride row reads `Next` until the last role; Triangle steps back one role
+  (`on_back`), and on the first role it is the stock back;
+- each Ride reports the pick with `JER_CARQ_ROLEPICK` (`ok` = mp kept it);
+- the last Ride launches with the pick of the `launch` role (palette included),
+  through the same path a one-pick Ride takes (`chkRideModel`).
+
+mp keeps the picks per mode and slot and swaps the player into the right one at
+each round's countdown; see mp's `docs/GAMEMODES.md`.
+
 ## Config
 
 | key | default | meaning |

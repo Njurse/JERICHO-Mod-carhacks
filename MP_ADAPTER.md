@@ -661,6 +661,8 @@ written down, and `mplive.c` is the carhacks side:
 | `JER_CARQ_CITIES` | which cities can this session offer? | every car-data city this install HAS (`chkCityCount()`: CHICAGO..RIO, Driver 1's seven, and any runtime bank registered in `JERICHO/CONFIG/cities.ini` whose files are on disk), or `count = 0` for "nobody knows" (the roster hack `unlock_extra_vehicles` is off, so this machine's picker has only the level's own city) |
 | `JER_CARQ_LOAD` | make `(city, model)` available here | `ok = 1` once the slot is set and built |
 | `JER_CARQ_CHOSEN` | (a notice, no answer) the local player is now driving `(city, model)` - or, `changed = 0`, the switch did not happen | updates carhacks' identity for this player, tells the session, and releases the old car's slot through the release routine |
+| `JER_CARQ_ROLES` | (carhacks asks, mp answers) how many cars does this session's mode want at join, with each role's title and pool, and which one launches? | carhacks walks the car select once per role (`carselect.c`, "Role cars" in `CARSELECT.md`); `count = 0` is one ordinary pick |
+| `JER_CARQ_ROLEPICK` | (carhacks tells, mp answers) the player picked `(city, model, palette)` for role `role` | mp keeps it for the round start if the role's pool allows it (`ok = 1`) |
 
 `JER_CARQ_LOAD` is not new machinery. It is the sequence a mid-match peer pick
 already goes through: `chkImportSlotForCar` (a car already in the set keeps its
