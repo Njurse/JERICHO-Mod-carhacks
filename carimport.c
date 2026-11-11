@@ -1598,8 +1598,16 @@ int chkImportVerifySlot(int slot)
 		slot, gChkSet[slot].city, gChkSet[slot].model, polys, onPinned, palBad,
 		chkVerifyTries[slot], CHK_VERIFY_RETRY_MAX);
 
-	/* the same reload the fold uses: re-defer the palette, rebuild the model,
-	 * re-walk the pages. The pin uploads them on the next draw. */
+	/* Release first, as "Reload all cars" does: a bare hot load over a built slot of
+	 * the same car is a no-op (JerHotLoadCarModel: already built), so the stale pin /
+	 * palette row that made it black stayed. Release, re-set, rebuild. */
+	{
+		CHK_IMPORT_ENTRY keep = gChkSet[slot];
+
+		chkImportReleaseSlot(slot);
+		chkImportSetSlot(slot, chkCarId((keep.city >= 0) ? keep.city : CHK_CITY_NATIVE, keep.model));
+	}
+
 	chkImportHotLoad(slot);
 
 	chkVerifyDue[slot] = chkVerifyFrame + CHK_VERIFY_RETRY_GAP;
