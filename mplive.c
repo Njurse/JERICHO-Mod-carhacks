@@ -425,8 +425,31 @@ static int ChkMpStandIn(void* userdata, void* args)
 	return JER_RESULT_CONTINUE;
 }
 
+static int ChkMpUnload(void* userdata, void* args)
+{
+	JER_CARQ_UNLOAD_ARGS* a = (JER_CARQ_UNLOAD_ARGS*)args;
+	CHK_CAR_ID id;
+	int slot;
+
+	(void)userdata;
+
+	if (a == NULL || a->city < 0 || a->city >= CHK_CAR_CITY_COUNT)
+		return JER_RESULT_CONTINUE;
+
+	id = chkCarId(a->city, a->model);
+
+	for (slot = CHK_IMPORT_SPARE_FIRST; slot < CHK_IMPORT_MAX_SLOTS; slot++)
+	{
+		if (chkImportSlotHeld(slot) && chkImportSlotId(slot) == id)
+			chkNetReleaseSlotIfUnused(slot, "unload request");
+	}
+
+	return JER_RESULT_CONTINUE;
+}
+
 void chkMpLiveRegister(JERICHO_CONTEXT* ctx)
 {
+	ctx->jer_register_hook(ctx, JER_CARQ_UNLOAD, ChkMpUnload, NULL, 0);
 	ctx->jer_register_hook(ctx, JER_CARQ_CITIES, ChkMpCities, NULL, 0);
 	ctx->jer_register_hook(ctx, JER_CARQ_SLOTS, ChkMpSlots, NULL, 0);
 	ctx->jer_register_hook(ctx, JER_CARQ_LOAD, ChkMpLoad, NULL, 0);
