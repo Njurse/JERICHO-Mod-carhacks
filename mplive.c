@@ -440,7 +440,7 @@ static int ChkMpUnload(void* userdata, void* args)
 
 	for (slot = CHK_IMPORT_SPARE_FIRST; slot < CHK_IMPORT_MAX_SLOTS; slot++)
 	{
-		if (chkImportSlotHeld(slot) && chkImportSlotId(slot) == id)
+		if (chkImportSlotHeld(slot) && chkCarIdEqual(chkImportSlotId(slot), id))
 			chkNetReleaseSlotIfUnused(slot, "unload request");
 	}
 
