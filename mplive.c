@@ -299,6 +299,13 @@ static int ChkMpLoad(void* userdata, void* args)
 	{
 		printInfo("[carhacks/mp] change car: %s model %d could not be built into slot %d\n",
 			chkCityName(a->city), a->model, slot);
+		{
+			const char* why = JerCarSlotRefusal(slot);
+
+			jer_console_log("[carhacks/mp] could not load %s model %d: %s", chkCityName(a->city), a->model,
+				why ? why : "no resident slot or page numbers free");
+		}
+
 		printInfo("[carhacks/mp]   detail: slotOfCar=%d usable=%d resident=%d srcCity=%d\n",
 			chkImportSlotForCar(a->city, a->model),
 			JerCarSlotUsable(slot),
