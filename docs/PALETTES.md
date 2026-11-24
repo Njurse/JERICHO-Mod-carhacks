@@ -679,3 +679,36 @@ what the rig fails on.
 enumerates cities past 3, so a Driver 1 defect could not have been seen at all. It imports
 cities 4–11 (including the Euro-43 beta, city 11) and fails on a short page check, a refused
 block, a palette gap *or* a slotmap miss, which is how the five-city case above was found.
+
+## 8. Wheels, colour counts, peds, damage - the 2026-11-23 pass
+
+**Wheel palettes are per wheel record, not per page.** The set-level pass derives one
+tyre/hub/damaged/fast palette per page set from the FIRST record naming it and stamps it on
+every record (`CarImportSetWheelPaletteClut`), and the cache was keyed `(city, set, hub)`.
+A baked page can hold several wheel designs (COPSNRBRS set 1: Rio wheels at x 0..128,
+Chicago at 128..256), so the second design drew in the first one's colours.
+`CarImportReserveRecordWheelPalettes` now runs last and gives each baked record the palette
+of its own page row (`tex.clut`, which the bake makes equal to the texture id); the cache
+is keyed by palette content too (`WHEEL_PAL_KEYS` per set and kind). Driver 2 cities keep
+the set-level path.
+
+**Colour counts come from the car, not the row.** `ProcessImportedPalette` used to wipe
+the host rows' column census right after `ProcessPalletLump` filled it, so every native
+car counted 1 colour and traffic spawned in its first. The host rows are kept across that
+clear now. The census is per texture id (`CarBakeRowNote` records which ids a slot reads),
+matching the draw clamp (`CarClutVariant`). A held import answers from its own model and
+`LUMP_PALLET` (`CarImportModelPaletteCount`: lump palette k fills column k+1). The draw's
+empty-column fallback walks the group's columns 0..5 (it walked -1..4).
+
+**Baked ped pages have their own remap key** (`city + CITY_COUNT`, `JER_PED_BAKED_KEY`).
+They are numbered with the city's real set numbers, so a car's set 4 and the baked ped
+"set 4" used to share one destination index.
+
+**The CLUT column ledger** (`JerClutLedgerTag` / `JerClutLedgerReport`, texture.c) names
+the owner of every lower-pool CLUT row. A take of an owned row or a double give-back prints
+`JERICHO-CLUT COLLISION`; the owner map follows the `JERICHO-VRAM` report.
+
+**Damage tables are per car** (`JerDentSyncSlot`, denting.c): a bank's `LUMP_CAR_DENTING`,
+else a Driver 2 source city's own `.DEN`, else empty - never the host's table for the same
+model number. The per-poly damage dump is 1024 polys on PC (it was 256, and a bigger model
+read the next car's bytes).
