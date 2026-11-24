@@ -1691,6 +1691,13 @@ static int chkNetOnFrame(void* ud, void* args)
 	 * in single player too (a config import is not a session). */
 	chkImportVerifyTick();
 
+	/* Deferred releases are retried in EVERY mode. They used to be retried only inside an
+	 * mp session, so in single player (or a sandbox/test mod) a release that found a car
+	 * still on the slot was never completed: its slot, hot-load block and page handles
+	 * stayed held until the level ended. A pending entry exists only because a release was
+	 * asked for, so this costs nothing when none is waiting. */
+	chkNetRetryPendingReleases();
+
 	(void)ud;
 	(void)args;
 
@@ -1737,10 +1744,6 @@ static int chkNetOnFrame(void* ud, void* args)
 		 * left (the car table simply stops naming them), so this is the HOST's half of
 		 * "a peer leaves -> release its slot". Idempotent. */
 		chkNetReapDeparted();
-
-		/* ...and the release decisions still waiting for a car to leave their slot. Also
-		 * before the early returns, for the same reason. */
-		chkNetRetryPendingReleases();
 
 		/* ...and the peer cars whose fold could not get a slot, or whose build did not
 		 * land yet. Same reason: this must run on the frames where nothing else about
