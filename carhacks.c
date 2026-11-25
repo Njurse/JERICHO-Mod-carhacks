@@ -15,6 +15,7 @@
 #include "jericho.h"
 #include "jer_events.h"
 #include "jer_config.h"
+#include "jer_net.h"		/* jer_net_is_active: the car select in a session */
 
 #include "carhacks.h"
 #include "carid.h"
@@ -348,7 +349,11 @@ static int ChkOnCarAvailability(void* ud, void* args)
 	 * screen has only STARTED its setup here - this hook runs before the code
 	 * that turns unlockExtra into CarAvailability - so the menu is only armed
 	 * and opens on the next frame, by which time that setup has finished. */
-	if (carhacks_enabled(CHK_HACK_CAR_SELECT))
+	/* In a session the menu is ALWAYS used, whatever car_select says: it is the
+	 * only car screen that asks for every role car (Cops n Robbers: a patrol car
+	 * AND a getaway car). A joiner with the hack off got the stock screen and
+	 * one pick. */
+	if (carhacks_enabled(CHK_HACK_CAR_SELECT) || jer_net_is_active())
 		chkCarSelectArm();
 
 	return JER_RESULT_CONTINUE;
@@ -627,8 +632,9 @@ void carhacks_register(JERICHO_CONTEXT* ctx)
 
 	/* the car-select menu (carselect.c): a JERICHO frontend menu that replaces
 	 * the stock Take-a-Ride car screen so it can carry the city-roster row */
-	if (carhacks_enabled(CHK_HACK_CAR_SELECT))
-		chkCarSelectRegister(ctx);
+	/* Always registered: a session uses it even with car_select off (it is the
+	 * only screen that asks for every role car); it only opens when armed. */
+	chkCarSelectRegister(ctx);
 
 	/* the multiplayer adapter (net.c): carhacks' own channel over the JERICHO
 	 * addon net bridge, so a session can agree which city each machine reads its
