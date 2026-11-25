@@ -23,6 +23,7 @@
 #include "jer_net.h"		/* jer_net_local_player: the canonical slot order */
 #include "net.h"		/* chkNetPeerCar: the peers' cars, in id order */
 
+#include "players.h"		/* player[0].playerCarId: is the local player in the game */
 #include "cars.h"		/* car_data[]: which cars are still on a slot (chkImportCarsOnSlot) */
 #include "denting.h"		/* CreateDentableCar: re-seat cars already on a hot-loaded slot */
 
@@ -64,10 +65,11 @@ static int gChkPickSpentLevel = -1;
 static CHK_CAR_ID gChkChosen;
 static int gChkChosenSet;
 
-/* JERICHO: 1 once a slot's car has had its post-load reload (chkImportVerifySlot).
- * Cleared when the slot is released, re-pointed at another car or a new level starts,
- * so each load gets exactly one. */
-static int gChkPostLoadDone[CHK_IMPORT_MAX_SLOTS];
+/* JERICHO: the in-game "Reload all cars" (chkImportInGameTick): frames the local
+ * player has been in control this level, and whether it already ran. Both are reset
+ * by chkImportReset, i.e. once per level entry. */
+static int gChkInGameFrames;
+static int gChkInGameReloaded;
 
 /* ---------------------------------------------------------------------------
  * Lifecycle
@@ -90,7 +92,8 @@ void chkImportReset(void)
 	gChkGuestCity = -1;
 	gChkGuestCityCount = 0;
 	gChkSetVersion++;
-	memset(gChkPostLoadDone, 0, sizeof(gChkPostLoadDone));
+	gChkInGameFrames = 0;
+	gChkInGameReloaded = 0;
 }
 
 /* JERICHO: consume the pick FOR A LEVEL - keeping the pair so that level can be
@@ -187,7 +190,6 @@ int chkImportReleaseSlot(int slot)
 	memset(&gChkSet[slot], 0, sizeof(gChkSet[slot]));
 	gChkSet[slot].model = -1;
 	gChkSet[slot].city = -1;
-	gChkPostLoadDone[slot] = 0;
 
 	if (held)
 	{
@@ -1344,7 +1346,6 @@ int chkImportReloadAll(void)
 			continue;
 
 		chkImportHotLoad(slot);
-		gChkPostLoadDone[slot] = 1;	/* already the post-load reload */
 	}
 
 	chkNetRequestReannounce("reload all cars");
@@ -1533,7 +1534,6 @@ static void chkVerifyReset(int slot)
 	chkVerifyCity[slot] = gChkSet[slot].city;
 	chkVerifyModel[slot] = gChkSet[slot].model;
 	chkVerifySince[slot] = chkVerifyFrame;
-	gChkPostLoadDone[slot] = 0;
 }
 
 /* Release, re-set and rebuild one slot: the per-slot half of "Reload all cars".
@@ -1597,24 +1597,6 @@ int chkImportVerifySlot(int slot)
 			slot, polys, onPinned, palUploaded, palBad);
 	}
 
-	/* JERICHO: an imported car's first load can draw wrong wheels until "Reload all
-	 * cars" rebuilds it, every time. Run that same reload once per load, automatically,
-	 * once the car has settled and built. The flag is set after the reload (whose release
-	 * clears it), so it cannot repeat until the slot gets a new car or level.
-	 * CHK_NO_POSTLOAD_RELOAD=1 turns it off for a before/after run. */
-	if (polys > 0 && gChkSet[slot].city >= 0 && !gChkPostLoadDone[slot] &&
-		getenv("CHK_NO_POSTLOAD_RELOAD") == NULL)
-	{
-		printInfo("[carhacks] post-load reload: slot %d (city %d model %d) - once per load, as Reload all cars does\n",
-			slot, gChkSet[slot].city, gChkSet[slot].model);
-
-		chkImportReloadSlot(slot);
-		gChkPostLoadDone[slot] = 1;
-		chkVerifyDue[slot] = chkVerifyFrame + CHK_VERIFY_RETRY_GAP;
-
-		return 0;
-	}
-
 	/* JERICHO: it reads the imported page with a clean palette - nothing to do. A car
 	 * whose palette row is a HOST row or an empty row is just as wrong as one drawing the
 	 * level's materials, so it is reloaded too (the same bounded retry below). */
@@ -1641,7 +1623,6 @@ int chkImportVerifySlot(int slot)
 	/* Release first, as "Reload all cars" does: the stale pin / palette row that made
 	 * it black stays through a bare hot load. */
 	chkImportReloadSlot(slot);
-	gChkPostLoadDone[slot] = 1;	/* this rebuild counts as the post-load reload */
 
 	chkVerifyDue[slot] = chkVerifyFrame + CHK_VERIFY_RETRY_GAP;
 
@@ -1672,6 +1653,46 @@ void chkImportVerifyTick(void)
 
 		chkImportVerifySlot(i);
 	}
+}
+
+/* JERICHO: run "Reload all cars" by itself once the player is in the game. An
+ * imported car can come up with the wrong wheels until that reload, every time, so
+ * it runs once per level entry: after the local player has been in control of a car
+ * for CHK_INGAME_RELOAD_FRAMES frames (single player, host, joiner and late joiner
+ * alike - each reaches its own spawn), and only when the level holds an import.
+ * Called from the module's FRAME hook. CHK_NO_INGAME_RELOAD=1 turns it off. */
+#define CHK_INGAME_RELOAD_FRAMES	30
+
+void chkImportInGameTick(void)
+{
+	int slot, imports = 0;
+
+	if (gChkInGameReloaded || !gChkEngineKnown)
+		return;
+
+	if (player[0].playerCarId < 0 || player[0].playerCarId >= MAX_CARS ||
+		car_data[player[0].playerCarId].controlType != CONTROL_TYPE_PLAYER)
+	{
+		gChkInGameFrames = 0;		/* not driving (yet): loading, car select, respawn */
+		return;
+	}
+
+	if (++gChkInGameFrames < CHK_INGAME_RELOAD_FRAMES)
+		return;
+
+	gChkInGameReloaded = 1;		/* once per level entry, whatever it finds */
+
+	for (slot = CHK_IMPORT_SPARE_FIRST; slot < CHK_IMPORT_MAX_SLOTS; slot++)
+		if (slot != SPECIAL_CAR_SLOT && gChkSet[slot].used && gChkSet[slot].city >= 0)
+			imports++;
+
+	if (imports == 0 || getenv("CHK_NO_INGAME_RELOAD") != NULL)
+		return;
+
+	printInfo("[carhacks] in-game reload: player in control for %d frame(s), %d imported slot(s) - running Reload all cars once for this level\n",
+		gChkInGameFrames, imports);
+
+	chkImportReloadAll();
 }
 
 int chkImportSlotForCar(int city, int model)

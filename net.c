@@ -1690,6 +1690,7 @@ static int chkNetOnFrame(void* ud, void* args)
 	/* Before anything session-shaped: an import is verified whenever one is held,
 	 * in single player too (a config import is not a session). */
 	chkImportVerifyTick();
+	chkImportInGameTick();
 
 	/* Deferred releases are retried in EVERY mode. They used to be retried only inside an
 	 * mp session, so in single player (or a sandbox/test mod) a release that found a car

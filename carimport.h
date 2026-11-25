@@ -306,6 +306,10 @@ int chkImportReloadAll(void);
  * bounded attempts. See the note above chkImportVerifySlot. */
 void chkImportVerifyTick(void);
 
+/* Once per level entry, after the local player has been in control for a moment:
+ * run chkImportReloadAll if the level holds an imported car. FRAME hook. */
+void chkImportInGameTick(void);
+
 /* One slot, for a test or a direct call. Returns 1 when it is fine. */
 int chkImportVerifySlot(int slot);
 
