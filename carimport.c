@@ -64,6 +64,11 @@ static int gChkPickSpentLevel = -1;
 static CHK_CAR_ID gChkChosen;
 static int gChkChosenSet;
 
+/* JERICHO: 1 once a slot's car has had its post-load reload (chkImportVerifySlot).
+ * Cleared when the slot is released, re-pointed at another car or a new level starts,
+ * so each load gets exactly one. */
+static int gChkPostLoadDone[CHK_IMPORT_MAX_SLOTS];
+
 /* ---------------------------------------------------------------------------
  * Lifecycle
  * ------------------------------------------------------------------------- */
@@ -85,6 +90,7 @@ void chkImportReset(void)
 	gChkGuestCity = -1;
 	gChkGuestCityCount = 0;
 	gChkSetVersion++;
+	memset(gChkPostLoadDone, 0, sizeof(gChkPostLoadDone));
 }
 
 /* JERICHO: consume the pick FOR A LEVEL - keeping the pair so that level can be
@@ -181,6 +187,7 @@ int chkImportReleaseSlot(int slot)
 	memset(&gChkSet[slot], 0, sizeof(gChkSet[slot]));
 	gChkSet[slot].model = -1;
 	gChkSet[slot].city = -1;
+	gChkPostLoadDone[slot] = 0;
 
 	if (held)
 	{
@@ -1337,6 +1344,7 @@ int chkImportReloadAll(void)
 			continue;
 
 		chkImportHotLoad(slot);
+		gChkPostLoadDone[slot] = 1;	/* already the post-load reload */
 	}
 
 	chkNetRequestReannounce("reload all cars");
@@ -1525,6 +1533,20 @@ static void chkVerifyReset(int slot)
 	chkVerifyCity[slot] = gChkSet[slot].city;
 	chkVerifyModel[slot] = gChkSet[slot].model;
 	chkVerifySince[slot] = chkVerifyFrame;
+	gChkPostLoadDone[slot] = 0;
+}
+
+/* Release, re-set and rebuild one slot: the per-slot half of "Reload all cars".
+ * A bare hot load over a built slot of the same car is a no-op (JerHotLoadCarModel:
+ * already built), so the slot's pins, palette rows (wheel rows included) and geometry
+ * have to be given back first for the rebuild to place them again. */
+static void chkImportReloadSlot(int slot)
+{
+	CHK_IMPORT_ENTRY keep = gChkSet[slot];
+
+	chkImportReleaseSlot(slot);
+	chkImportSetSlot(slot, chkCarId((keep.city >= 0) ? keep.city : CHK_CITY_NATIVE, keep.model));
+	chkImportHotLoad(slot);
 }
 
 /* One slot. Returns 1 when it is fine (or not ours to judge), 0 when a reload was
@@ -1575,6 +1597,24 @@ int chkImportVerifySlot(int slot)
 			slot, polys, onPinned, palUploaded, palBad);
 	}
 
+	/* JERICHO: an imported car's first load can draw wrong wheels until "Reload all
+	 * cars" rebuilds it, every time. Run that same reload once per load, automatically,
+	 * once the car has settled and built. The flag is set after the reload (whose release
+	 * clears it), so it cannot repeat until the slot gets a new car or level.
+	 * CHK_NO_POSTLOAD_RELOAD=1 turns it off for a before/after run. */
+	if (polys > 0 && gChkSet[slot].city >= 0 && !gChkPostLoadDone[slot] &&
+		getenv("CHK_NO_POSTLOAD_RELOAD") == NULL)
+	{
+		printInfo("[carhacks] post-load reload: slot %d (city %d model %d) - once per load, as Reload all cars does\n",
+			slot, gChkSet[slot].city, gChkSet[slot].model);
+
+		chkImportReloadSlot(slot);
+		gChkPostLoadDone[slot] = 1;
+		chkVerifyDue[slot] = chkVerifyFrame + CHK_VERIFY_RETRY_GAP;
+
+		return 0;
+	}
+
 	/* JERICHO: it reads the imported page with a clean palette - nothing to do. A car
 	 * whose palette row is a HOST row or an empty row is just as wrong as one drawing the
 	 * level's materials, so it is reloaded too (the same bounded retry below). */
@@ -1598,17 +1638,10 @@ int chkImportVerifySlot(int slot)
 		slot, gChkSet[slot].city, gChkSet[slot].model, polys, onPinned, palBad,
 		chkVerifyTries[slot], CHK_VERIFY_RETRY_MAX);
 
-	/* Release first, as "Reload all cars" does: a bare hot load over a built slot of
-	 * the same car is a no-op (JerHotLoadCarModel: already built), so the stale pin /
-	 * palette row that made it black stayed. Release, re-set, rebuild. */
-	{
-		CHK_IMPORT_ENTRY keep = gChkSet[slot];
-
-		chkImportReleaseSlot(slot);
-		chkImportSetSlot(slot, chkCarId((keep.city >= 0) ? keep.city : CHK_CITY_NATIVE, keep.model));
-	}
-
-	chkImportHotLoad(slot);
+	/* Release first, as "Reload all cars" does: the stale pin / palette row that made
+	 * it black stays through a bare hot load. */
+	chkImportReloadSlot(slot);
+	gChkPostLoadDone[slot] = 1;	/* this rebuild counts as the post-load reload */
 
 	chkVerifyDue[slot] = chkVerifyFrame + CHK_VERIFY_RETRY_GAP;
 
