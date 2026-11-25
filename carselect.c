@@ -811,7 +811,17 @@ static int chkSelOnFrame(void* ud, void* args)
 		gChkRosterCity = city;
 		chkClampCursor();
 
-		chkRideWith(city, car);
+		/* a session with role cars: one pick per role, the first car of each
+		 * role's pool, through the role Ride so the session is told each pick */
+		if (gChkRoles.count > 0)
+		{
+			while (gChkRoleStep < gChkRoles.count - 1 && chkRoleRide(city, 0))
+				;
+
+			chkRoleRide(city, 0);
+		}
+		else
+			chkRideWith(city, car);
 	}
 
 	return JER_RESULT_CONTINUE;
